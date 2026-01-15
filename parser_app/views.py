@@ -4,7 +4,6 @@ import json
 from django.http import HttpResponse
 from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 from .models import Product
 from .serializers import ProductSerializer
@@ -21,12 +20,13 @@ class ProductRetrieveView(generics.RetrieveAPIView):
     serializer_class = ProductSerializer
 
 
-class ProductScrapeView(APIView):
+class ProductScrapeView(generics.CreateAPIView):
     """Create or update a product by scraping data from brain.com.ua."""
 
     serializer_class = ProductSerializer
+    queryset = Product.objects.all()
 
-    def post(self, request, *args, **kwargs):  # noqa: D401 - DRF signature
+    def create(self, request, *args, **kwargs):
         url = request.data.get("url")
         if not url:
             return Response({"detail": "Поле 'url' обязательно."}, status=status.HTTP_400_BAD_REQUEST)
@@ -52,14 +52,22 @@ class ProductScrapeView(APIView):
             defaults=product_defaults,
         )
 
-        serializer = self.serializer_class(product)
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        serializer = self.get_serializer(product)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            headers=headers,
+        )
 
 
-class ProductExportCsvView(APIView):
+class ProductExportCsvView(generics.ListAPIView):
     """Export all products to CSV."""
 
-    def get(self, request, *args, **kwargs):  # noqa: D401 - DRF signature
+    queryset = Product.objects.all().order_by("-created_at")
+    serializer_class = ProductSerializer
+
+    def get(self, request, *args, **kwargs):
         fields = [
             "id",
             "name",
@@ -86,8 +94,7 @@ class ProductExportCsvView(APIView):
         writer = csv.writer(response)
         writer.writerow(fields)
 
-        queryset = Product.objects.all().order_by("-created_at")
-        for product in queryset:
+        for product in self.get_queryset():
             row = []
             for field in fields:
                 value = getattr(product, field)
