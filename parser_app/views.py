@@ -1,9 +1,11 @@
-import csv
 import json
+from io import StringIO
 
 from django.http import HttpResponse
 from rest_framework import generics, status
 from rest_framework.response import Response
+
+import pandas as pd
 
 from .models import Product
 from .serializers import ProductSerializer
@@ -88,19 +90,24 @@ class ProductExportCsvView(generics.ListAPIView):
             "updated_at",
         ]
 
-        response = HttpResponse(content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="products.csv"'
-
-        writer = csv.writer(response)
-        writer.writerow(fields)
-
-        for product in self.get_queryset():
-            row = []
+        queryset = self.get_queryset().values(*fields)
+        records = []
+        for product in queryset:
+            record = {}
             for field in fields:
-                value = getattr(product, field)
-                if isinstance(value, (dict, list)):
+                value = product.get(field)
+                if field in {"images", "characteristics", "metadata"} and value not in (None, ""):
                     value = json.dumps(value, ensure_ascii=False)
-                row.append(value)
-            writer.writerow(row)
+                if field in {"created_at", "updated_at"} and value is not None:
+                    value = value.isoformat()
+                record[field] = value
+            records.append(record)
 
+        df = pd.DataFrame(records, columns=fields)
+
+        buffer = StringIO()
+        df.to_csv(buffer, index=False)
+
+        response = HttpResponse(buffer.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="products.csv"'
         return response
