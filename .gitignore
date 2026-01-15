@@ -1,0 +1,171 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment variables
+.env
+!.env.example
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Project specific
+media/
+staticfiles/
+*.sqlite3
+*.log
+local_settings.py
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Sphinx
+docs/_build/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+temp/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Logs
+logs/
+*.log
+
+# Local development
+*.local
+
+# Project specific
+*.bak
+*.backup
+*.swp
+*~
+
+# Poetry
+poetry.lock
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Database
+db.sqlite3
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local development
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Project specific
+mediafiles/
+staticfiles/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local development
+.venv/
+
+# Project specific
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Project specific
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Logs
+logs/
+*.log
+
+# Local development
+*.local
+
+# Project specific
+*.bak
+*.backup
+*.swp
+*~
