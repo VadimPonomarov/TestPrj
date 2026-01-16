@@ -9,9 +9,13 @@ from rest_framework.response import Response
 
 import pandas as pd
 
+from core.enums import ParserType
+from core.schemas import ProductData
+
 from .models import Product
 from .serializers import ProductSerializer
-from .services.brain_parser import BrainProductParser, format_product_output
+from .services.factory import get_parser
+from .services.brain_parser import format_product_output
 
 
 class ProductListCreateView(generics.ListCreateAPIView):
@@ -31,29 +35,34 @@ class ProductScrapeView(generics.CreateAPIView):
     queryset = Product.objects.all()
 
     def create(self, request, *args, **kwargs):
+        parser_type_kwarg = kwargs.get("parser_type")
+        parser_type_raw = parser_type_kwarg or request.data.get("parser", ParserType.BS4.value)
+        try:
+            parser_type = ParserType.from_string(parser_type_raw)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         url = request.data.get("url")
-        if not url:
-            return Response({"detail": "Поле 'url' обязательно."}, status=status.HTTP_400_BAD_REQUEST)
+        query = request.data.get("query")
+        if not url and not query:
+            return Response(
+                {"detail": "Необходимо указать либо 'url', либо 'query'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        parser = BrainProductParser(url)
-        product_data = parser.parse()
+        parser = get_parser(parser_type)
+        try:
+            product_payload: ProductData = parser.parse(query=query, url=url)
+        except Exception as exc:  # pragma: no cover - handled by parser logging
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not product_data:
-            return Response({"detail": "Не удалось разобрать страницу товара."}, status=status.HTTP_400_BAD_REQUEST)
+        printable = format_product_output(product_payload.to_dict())
+        parser.logger.info("Parsed product:\n%s", printable)
 
-        product_code = product_data.get("product_code")
-        if not product_code:
-            return Response({"detail": "Код товара не найден на странице."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Print parsed data for debugging/logging (Step 3 requirement)
-        print(format_product_output(product_data))
-
-        product_defaults = product_data.copy()
-        product_defaults.pop("product_code", None)
-
+        payload = product_payload.to_model_payload()
         product, created = Product.objects.update_or_create(
-            product_code=product_code,
-            defaults=product_defaults,
+            product_code=payload.pop("product_code"),
+            defaults=payload,
         )
 
         serializer = self.get_serializer(product)

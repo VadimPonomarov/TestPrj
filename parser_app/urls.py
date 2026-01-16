@@ -10,6 +10,6 @@ from .views import (
 urlpatterns = [
     path("products/", ProductListCreateView.as_view(), name="product-list"),
     path("products/<int:pk>/", ProductRetrieveView.as_view(), name="product-detail"),
-    path("products/scrape/", ProductScrapeView.as_view(), name="product-scrape"),
+    path("products/<str:parser_type>/scrape/", ProductScrapeView.as_view(), name="product-scrape"),
     path("products/export-csv/", ProductExportCsvView.as_view(), name="product-export-csv"),
 ]
