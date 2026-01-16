@@ -4,7 +4,11 @@ import os
 from django.conf import settings
 from django.http import FileResponse
 from django.utils import timezone
-from rest_framework import generics, status
+from rest_framework import generics, status, filters
+from rest_framework.pagination import PageNumberPagination
+from django_filters.rest_framework import DjangoFilterBackend
+
+from .filters import ProductFilter
 from rest_framework.response import Response
 
 import pandas as pd
@@ -18,9 +22,21 @@ from .services.factory import get_parser
 from .services.brain_parser import format_product_output
 
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class ProductListCreateView(generics.ListCreateAPIView):
     queryset = Product.objects.all().order_by("-created_at")
     serializer_class = ProductSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filterset_class = ProductFilter
+    pagination_class = StandardResultsSetPagination
+    search_fields = ['name', 'product_code', 'manufacturer', 'characteristics']
+    ordering_fields = ['name', 'price', 'created_at', 'updated_at']
+    ordering = ['-created_at']
 
 
 class ProductRetrieveView(generics.RetrieveAPIView):
@@ -75,10 +91,15 @@ class ProductScrapeView(generics.CreateAPIView):
 
 
 class ProductExportCsvView(generics.ListAPIView):
-    """Export all products to CSV."""
-
-    queryset = Product.objects.all().order_by("-created_at")
+    """Export filtered products to CSV."""
+    
     serializer_class = ProductSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filterset_class = ProductFilter
+    search_fields = ['name', 'product_code', 'manufacturer', 'characteristics']
+    
+    def get_queryset(self):
+        return Product.objects.all().order_by("-created_at")
 
     def get(self, request, *args, **kwargs):
         fields = [
