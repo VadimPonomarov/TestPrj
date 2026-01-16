@@ -1,7 +1,9 @@
 import json
-from io import StringIO
+import os
 
-from django.http import HttpResponse
+from django.conf import settings
+from django.http import FileResponse
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 
@@ -105,9 +107,11 @@ class ProductExportCsvView(generics.ListAPIView):
 
         df = pd.DataFrame(records, columns=fields)
 
-        buffer = StringIO()
-        df.to_csv(buffer, index=False)
+        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"products_{timestamp}.csv"
+        temp_file_path = os.path.join(settings.TEMP_DIR, file_name)
 
-        response = HttpResponse(buffer.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="products.csv"'
-        return response
+        df.to_csv(temp_file_path, index=False)
+
+        file_handle = open(temp_file_path, "rb")
+        return FileResponse(file_handle, as_attachment=True, filename=file_name)

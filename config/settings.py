@@ -129,3 +129,13 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Temp directory for temporary files
+TEMP_DIR = os.path.join(BASE_DIR, 'temp')
+
+# Create directories if they don't exist
+os.makedirs(MEDIA_ROOT, exist_ok=True)
+os.makedirs(TEMP_DIR, exist_ok=True)
