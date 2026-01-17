@@ -11,20 +11,54 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   web:
     build: .
-    command: >-
-      bash -c "python scripts/wait_for_db.py && python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/code
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
+      - static_volume:/code/static
+      - media_volume:/code/media
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - IS_DOCKER=true
     env_file:
       - .env
+    ports:
+      - "8000:8000"
+    working_dir: /code
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo '📊 Waiting for PostgreSQL database...' &&
+        python manage.py wait_db --timeout=60 --interval=1 &&
+        echo '🔄 Running database migrations...' &&
+        python manage.py migrate --noinput &&
+        echo '📁 Collecting static files...' &&
+        python manage.py collectstatic --noinput --clear &&
+        echo '🚀 Starting development server...' &&
+        python manage.py runserver 0.0.0.0:8000
+      "
+
+  nginx:
+    image: nginx:1.21.0
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/app/static
+      - media_volume:/app/media
+    depends_on:
+      - web
 
 volumes:
   postgres_data:
+  static_volume:
+  media_volume:

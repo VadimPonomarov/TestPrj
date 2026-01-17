@@ -5,8 +5,8 @@ from django.conf import settings
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import generics, status, filters
-from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_yasg.utils import swagger_auto_schema
 
 from .filters import ProductFilter
 from rest_framework.response import Response
@@ -17,31 +17,60 @@ from core.enums import ParserType
 from core.schemas import ProductData
 
 from .models import Product
-from .serializers import ProductSerializer
+from .pagination import CustomPagination
+from .serializers import ProductSerializer, ProductScrapeRequestSerializer
 from .services.factory import get_parser
-from .services.brain_parser import format_product_output
-
-
-class StandardResultsSetPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = 'page_size'
-    max_page_size = 100
+from .services.parsers import format_product_output
 
 
 class ProductListCreateView(generics.ListCreateAPIView):
-    queryset = Product.objects.all().order_by("-created_at")
+    """
+    View for listing and creating products with filtering and pagination.
+    
+    Filtering:
+    - Search: /?search=query (searches in name, product_code, manufacturer, characteristics)
+    - Price range: /?min_price=100&max_price=1000
+    - Exact match: /?name=exact_name
+    - Contains: /?name__icontains=partial_name
+    - Greater than: /?price__gt=100
+    - Less than: /?price__lt=1000
+    
+    Ordering:
+    - /?ordering=field (ascending)
+    - /?ordering=-field (descending)
+    Available fields: name, price, created_at, updated_at
+    
+    Pagination:
+    - /?page=2
+    - /?page=2&page_size=50
+    """
+    queryset = Product.objects.all()
     serializer_class = ProductSerializer
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ProductFilter
-    pagination_class = StandardResultsSetPagination
-    search_fields = ['name', 'product_code', 'manufacturer', 'characteristics']
+    pagination_class = CustomPagination
     ordering_fields = ['name', 'price', 'created_at', 'updated_at']
     ordering = ['-created_at']
+    
+    def get_queryset(self):
+        return super().get_queryset().order_by('-created_at')
+
+    @swagger_auto_schema(responses={200: ProductSerializer(many=True)})
+    def get(self, *args, **kwargs):  # type: ignore[override]
+        return super().get(*args, **kwargs)
+
+    @swagger_auto_schema(request_body=ProductSerializer, responses={201: ProductSerializer, 200: ProductSerializer})
+    def post(self, *args, **kwargs):  # type: ignore[override]
+        return super().post(*args, **kwargs)
 
 
 class ProductRetrieveView(generics.RetrieveAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+
+    @swagger_auto_schema(responses={200: ProductSerializer})
+    def get(self, *args, **kwargs):  # type: ignore[override]
+        return super().get(*args, **kwargs)
 
 
 class ProductScrapeView(generics.CreateAPIView):
@@ -50,19 +79,32 @@ class ProductScrapeView(generics.CreateAPIView):
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
 
+    @swagger_auto_schema(
+        request_body=ProductScrapeRequestSerializer,
+        responses={200: ProductSerializer, 201: ProductSerializer},
+        operation_summary="Scrape product data",
+        operation_description=(
+            "Trigger scraping for a brain.com.ua product using the selected parser backend and "
+            "return the resulting product instance."
+        ),
+    )
     def create(self, request, *args, **kwargs):
+        serializer = ProductScrapeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
         parser_type_kwarg = kwargs.get("parser_type")
-        parser_type_raw = parser_type_kwarg or request.data.get("parser", ParserType.BS4.value)
+        validated = serializer.validated_data
+        parser_type_raw = parser_type_kwarg or validated.get("parser", ParserType.BS4.value)
         try:
             parser_type = ParserType.from_string(parser_type_raw)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        url = request.data.get("url")
-        query = request.data.get("query")
+        url = validated.get("url")
+        query = validated.get("query")
         if not url and not query:
             return Response(
-                {"detail": "Необходимо указать либо 'url', либо 'query'."},
+                {"detail": "Either 'url' or 'query' must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -94,9 +136,8 @@ class ProductExportCsvView(generics.ListAPIView):
     """Export filtered products to CSV."""
     
     serializer_class = ProductSerializer
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter, filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ProductFilter
-    search_fields = ['name', 'product_code', 'manufacturer', 'characteristics']
     
     def get_queryset(self):
         return Product.objects.all().order_by("-created_at")
