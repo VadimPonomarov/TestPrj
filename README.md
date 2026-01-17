@@ -117,6 +117,10 @@ Logs stream in the same terminal. First boot performs DB migrations and collects
 
 > Stop stack: `docker compose down -v` (add `-v` to drop postgres volume).
 
+## Deployment guide
+
+Detailed instructions (including `deploy.py` usage, classic Docker workflow, db-only mode, troubleshooting) live in **`DEPLOYMENT.md`**. Open that file after cloning to follow the recommended flow.
+
 ## Local Scrapy-only workflow (no web container)
 
 Sometimes you only need the PostgreSQL service while keeping Scrapy spiders running locally (outside Docker). Steps:

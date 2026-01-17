@@ -20,8 +20,10 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment variables
-.env
+# Environment variables (tracked for portability)
+.env*
+!.env
+!.env.*
 !.env.example
 
 # Virtual environment
@@ -134,11 +136,6 @@ db.sqlite3
 # Project specific
 mediafiles/
 staticfiles/
-
-# Environment files
-.env
-.env.*
-!.env.example
 
 # Local development
 .venv/
