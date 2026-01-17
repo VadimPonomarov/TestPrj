@@ -79,11 +79,11 @@ pytest.ini             # Pytest configuration
 
 ## Cloning & local setup
 
-```bash
+```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
-cd TestPrj
-cp .env.example .env        # adjust DB credentials, secrets, etc.
-poetry install              # or pip install -r requirements.txt if preferred
+Set-Location TestPrj
+Copy-Item .env.example .env        # adjust DB credentials, secrets, etc.
+poetry install                     # or: pip install -r requirements.txt
 poetry run python manage.py migrate
 poetry run python manage.py runserver 0.0.0.0:8000
 ```
@@ -98,10 +98,10 @@ poetry run python manage.py runserver 0.0.0.0:8000
 
 Prerequisites: Docker ≥ 24, Compose v2, `.env` configured.
 
-```bash
+```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
-cd TestPrj
-cp .env.example .env
+Set-Location TestPrj
+Copy-Item .env.example .env
 docker compose up --build
 ```
 
@@ -117,6 +117,31 @@ Logs stream in the same terminal. First boot performs DB migrations and collects
 
 > Stop stack: `docker compose down -v` (add `-v` to drop postgres volume).
 
+## Local Scrapy-only workflow (no web container)
+
+Sometimes you only need the PostgreSQL service while keeping Scrapy spiders running locally (outside Docker). Steps:
+
+1. Start only the DB container:
+   ```powershell
+   docker compose up db -d
+   ```
+2. Set temporary environment overrides (or rely on `.env.local`) so local Scrapy talks to the container:
+   ```powershell
+   $env:SQL_HOST = "127.0.0.1"
+   $env:SQL_PORT = "5434"
+   $env:SQL_DATABASE = "mydb"
+   $env:SQL_USER = "myuser"
+   $env:SQL_PASSWORD = "mypassword"
+   $env:DJANGO_SETTINGS_MODULE = "config.settings"
+   ```
+3. Activate Poetry shell (or prefix with `poetry run`) and launch spiders from `scrapy_project`:
+   ```powershell
+   Set-Location scrapy_project
+   poetry run scrapy crawl brain_bs4 -a "urls=https://brain.com.ua/..."
+   ```
+
+Only PostgreSQL runs in Docker; Django/DRF stays idle. The spiders still reuse the same serializers/models, so the API (if/when you start it) immediately sees the new data.
+
 ## Environment configuration
 
 | Variable | Description | Default |
@@ -131,7 +156,7 @@ Update `.env` or Docker Compose overrides to match your environment (Playwright 
 
 ## Database & static assets
 
-```bash
+```powershell
 poetry run python manage.py migrate
 poetry run python manage.py collectstatic
 poetry run python manage.py createsuperuser
@@ -139,7 +164,7 @@ poetry run python manage.py createsuperuser
 
 In Docker these steps are executed automatically by the `web` entry command. To reset local DB:
 
-```bash
+```powershell
 docker compose down -v
 docker compose up
 ```
@@ -179,17 +204,20 @@ Base prefix: `/api/`
 
 **Curl examples**
 
-```bash
+```powershell
 # Scrape via default BeautifulSoup parser
-curl -X POST http://localhost:8000/api/products/scrape/bs4/ \
-     -H "Content-Type: application/json" \
-     -d '{"url":"https://brain.com.ua/ukr/..."}'
+$body = '{"url":"https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"}'
+Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:8000/api/products/scrape/bs4/" `
+    -ContentType "application/json" `
+    -Body $body
 
 # List with filters & ordering
-curl "http://localhost:8000/api/products/?search=iphone&ordering=-price&page_size=20"
+Invoke-RestMethod -Uri "http://localhost:8000/api/products/?search=iphone&ordering=-price&page_size=20" |
+    ConvertTo-Json -Depth 4
 
 # Export CSV
-curl -o products.csv http://localhost:8000/api/products/export-csv/
+Invoke-WebRequest -Uri "http://localhost:8000/api/products/export-csv/" -OutFile "products.csv"
 ```
 
 ## Direct parser usage
@@ -214,7 +242,7 @@ Returned fields include:
 
 ## Testing & quality gates
 
-```bash
+```powershell
 poetry run pytest
 poetry run pytest parser_app/tests/test_endpoints.py -k scrape
 ```

@@ -73,10 +73,10 @@ pytest.ini             # Налаштування pytest
 
 ## Клонування та локальний запуск
 
-```bash
+```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
-cd TestPrj
-cp .env.example .env      # оновіть креденшіали БД
+Set-Location TestPrj
+Copy-Item .env.example .env      # оновіть креденшіали БД
 poetry install
 poetry run python manage.py migrate
 poetry run python manage.py runserver 0.0.0.0:8000
@@ -92,16 +92,16 @@ poetry run python manage.py runserver 0.0.0.0:8000
 
 Передумови: Docker ≥ 24, Compose v2, налаштований `.env`.
 
-```bash
+```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
-cd TestPrj
-cp .env.example .env
+Set-Location TestPrj
+Copy-Item .env.example .env
 docker compose up --build
 ```
 
 | Сервіс | Порт | Призначення |
 | ------ | ---- | ----------- |
-| `db`   | 5433 | PostgreSQL 14 з healthcheck |
+| `db`   | 5434 | PostgreSQL 14 з healthcheck |
 | `web`  | 8000 | Django-додаток |
 | `nginx`| 80   | Проксі + статичні файли |
 
@@ -121,7 +121,7 @@ docker compose up --build
 
 ## База даних і статика
 
-```bash
+```powershell
 poetry run python manage.py migrate
 poetry run python manage.py collectstatic
 poetry run python manage.py createsuperuser
@@ -163,14 +163,17 @@ poetry run python manage.py createsuperuser
 
 ### Приклади cURL
 
-```bash
-curl -X POST http://localhost:8000/api/products/scrape/bs4/ \
-     -H "Content-Type: application/json" \
-     -d '{"url":"https://brain.com.ua/ukr/..."}'
+```powershell
+$body = '{"url":"https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"}'
+Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:8000/api/products/scrape/bs4/" `
+    -ContentType "application/json" `
+    -Body $body
 
-curl "http://localhost:8000/api/products/?search=iphone&ordering=-price&page_size=20"
+Invoke-RestMethod -Uri "http://localhost:8000/api/products/?search=iphone&ordering=-price&page_size=20" |
+    ConvertTo-Json -Depth 4
 
-curl -o products.csv http://localhost:8000/api/products/export-csv/
+Invoke-WebRequest -Uri "http://localhost:8000/api/products/export-csv/" -OutFile "products.csv"
 ```
 
 ## Пряме використання парсерів
