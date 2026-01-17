@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from core.enums import ParserType
 from core.serializers import BaseModelSerializer
 from .models import Product
 
@@ -32,14 +31,19 @@ class ProductSerializer(BaseModelSerializer):
 class ProductScrapeRequestSerializer(serializers.Serializer):
     """Request payload for product scraping endpoint."""
 
-    parser = serializers.ChoiceField(
-        choices=[(choice.value, choice.name.title()) for choice in ParserType],
-        default=ParserType.BS4.value,
-        required=False,
-        help_text="Parser backend to execute. Defaults to BeautifulSoup parser.",
+    DEFAULT_PRODUCT_URL = (
+        "https://brain.com.ua/ukr/"
+        "Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
     )
+
+    swagger_schema_fields = {
+        "example": {
+            "url": DEFAULT_PRODUCT_URL
+        }
+    }
     url = serializers.URLField(
         required=False,
+        default=DEFAULT_PRODUCT_URL,
         help_text="Direct product URL from brain.com.ua to scrape.",
     )
     query = serializers.CharField(
