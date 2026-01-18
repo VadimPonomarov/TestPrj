@@ -147,7 +147,9 @@ poetry run python manage.py createsuperuser
 | GET | `/products/` | Список з пошуком, фільтрами, пагінацією |
 | GET | `/products/<id>/` | Деталі продукту |
 | GET | `/products/export-csv/` | Експорт CSV |
-| POST | `/products/scrape/<parser_type>/` | Запуск парсера (`bs4`, `selenium`, `playwright`) |
+| POST | `/products/scrape/bs4/` | Запуск BS4 парсера |
+| POST | `/products/scrape/selenium/` | Запуск Selenium парсера |
+| POST | `/products/scrape/playwright/` | Запуск Playwright парсера |
 
 ### Приклад запиту на парсинг
 
@@ -157,8 +159,16 @@ poetry run python manage.py createsuperuser
 }
 ```
 
-- Потрібен `url` або `query`. За замовчуванням значення підтягуються з
-  `ProductScrapeRequestSerializer` залежно від `parser_type`.
+Для `selenium`/`playwright` використовуйте пошуковий сценарій (запит на головній):
+
+```json
+{
+  "query": "Apple iPhone 15 128GB Black"
+}
+```
+
+- `bs4`: `url` обовʼязковий, `query` заборонений.
+- `selenium`/`playwright`: `query` обовʼязковий, `url` ігнорується.
 - Успішний виклик повертає створений/оновлений запис `Product`.
 
 ### Приклади cURL

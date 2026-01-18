@@ -37,13 +37,24 @@ EXTENSIONS = {
     "scrapy.extensions.closespider.CloseSpider": None,
 }
 
-FEEDS = {
-    os.getenv("SCRAPY_FEED_URI", ""): {
-        "format": os.getenv("SCRAPY_FEED_FORMAT", "json"),
-        "encoding": "utf8",
-        "store_empty": False,
-        "indent": 2,
+_feed_uri = os.getenv("SCRAPY_FEED_URI")
+_feed_format = os.getenv("SCRAPY_FEED_FORMAT", "csv")
+
+if _feed_uri:
+    FEEDS = {
+        _feed_uri: {
+            "format": _feed_format,
+            "encoding": "utf8",
+            "store_empty": False,
+            "indent": 2,
+        }
     }
-    for _ in [0]
-    if os.getenv("SCRAPY_FEED_URI")
-}
+else:
+    (BASE_DIR.parent / "outputs").mkdir(parents=True, exist_ok=True)
+    FEEDS = {
+        "outputs/%(name)s_%(time)s.csv": {
+            "format": "csv",
+            "encoding": "utf8",
+            "store_empty": False,
+        }
+    }

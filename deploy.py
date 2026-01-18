@@ -20,13 +20,17 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 import textwrap
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Literal, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -77,6 +81,23 @@ SERVICES_FULL = ["db", "web", "nginx"]
 SERVICES_DB_ONLY = ["db"]
 WAIT_TARGETS_FULL = ["db", "web"]
 WAIT_TARGETS_DB_ONLY = ["db"]
+NAMED_VOLUMES = ["postgres_data", "static_volume", "media_volume"]
+
+
+def _slugify_project_name(raw: str) -> str:
+    slug = re.sub(r"[^a-z0-9-]", "-", raw.lower())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    return slug or "testprj"
+
+
+DEFAULT_PROJECT_NAME = _slugify_project_name(REPO_ROOT.name)
+COMPOSE_PROJECT_NAME = os.environ.get("COMPOSE_PROJECT_NAME", DEFAULT_PROJECT_NAME)
+
+
+def compose_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["COMPOSE_PROJECT_NAME"] = COMPOSE_PROJECT_NAME
+    return env
 
 
 class Colors:
@@ -170,7 +191,7 @@ def run_compose(services: Iterable[str], build: bool) -> None:
         cmd.insert(3, "--build")
     cmd.extend(services)
     print(f"{Colors.DIM}$ {' '.join(cmd)}{Colors.RESET}")
-    result = subprocess.run(cmd, cwd=REPO_ROOT, text=True)
+    result = subprocess.run(cmd, cwd=REPO_ROOT, text=True, env=compose_env())
     if result.returncode != 0:
         print_error("docker compose command failed.")
         sys.exit(result.returncode)
@@ -196,6 +217,7 @@ def wait_for_service(service: str, timeout: int) -> bool:
             text=True,
             capture_output=True,
             check=False,
+            env=compose_env(),
         ).stdout.strip()
         if container_id:
             inspect = subprocess.run(
@@ -243,14 +265,15 @@ def print_manual_instructions() -> None:
 
 def summarize(services: Iterable[str], db_only: bool) -> None:
     print()
-    print_success("Deployment steps finished")
+    print_success("Деплой завершено")
     if db_only:
-        print("PostgreSQL is available on localhost:5434 (mapped from container). Run Scrapy locally as documented.")
+        print("PostgreSQL доступний на localhost:5434 (проксі з контейнера). Запускайте Scrapy локально згідно з інструкцією.")
     else:
-        print("Services should now be reachable:")
-        print("  • API:           http://localhost:8000/api/products/")
-        print("  • Swagger UI:    http://localhost:8000/api/doc/")
-        print("  • Admin/manage:  docker compose exec web python manage.py createsuperuser (if needed)")
+        print("Сервіси мають бути доступні через nginx:")
+        print("  • Nginx проксі:  http://localhost/")
+        print("  • API:           http://localhost/api/products/")
+        print("  • Swagger UI:    http://localhost/api/doc/")
+        print("    (прямий Django-доступ за потреби: http://localhost:8000/)")
     print_manual_instructions()
 
 
@@ -274,6 +297,139 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+@dataclass
+class Conflict:
+    resource_type: Literal["container", "network", "volume"]
+    name: str
+    note: str
+
+
+def _expected_container_names(services: Sequence[str]) -> List[str]:
+    names: set[str] = set()
+    for service in services:
+        suffix = f"{service}-1"
+        names.add(f"{COMPOSE_PROJECT_NAME}-{suffix}")
+        names.add(f"{COMPOSE_PROJECT_NAME}_{suffix}")
+    return sorted(names)
+
+
+def _expected_network_names() -> List[str]:
+    return [
+        f"{COMPOSE_PROJECT_NAME}_default",
+        f"{COMPOSE_PROJECT_NAME}-default",
+    ]
+
+
+def _expected_volume_names() -> List[str]:
+    names: List[str] = []
+    for volume in NAMED_VOLUMES:
+        names.append(f"{COMPOSE_PROJECT_NAME}_{volume}")
+        names.append(f"{COMPOSE_PROJECT_NAME}-{volume}")
+    return names
+
+
+def _inspect_docker_resource(resource_type: str, name: str) -> tuple[bool, bool]:
+    if resource_type == "container":
+        cmd = ["docker", "container", "inspect", name]
+    elif resource_type == "network":
+        cmd = ["docker", "network", "inspect", name]
+    elif resource_type == "volume":
+        cmd = ["docker", "volume", "inspect", name]
+    else:
+        raise ValueError(f"Unsupported resource type: {resource_type}")
+
+    result = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    if result.returncode != 0:
+        return False, False
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return True, False
+
+    if not data:
+        return False, False
+
+    if resource_type == "container":
+        labels = (data[0].get("Config") or {}).get("Labels") or {}
+    else:
+        labels = data[0].get("Labels") or {}
+    same_project = labels.get("com.docker.compose.project") == COMPOSE_PROJECT_NAME
+    return True, same_project
+
+
+def detect_name_conflicts(services: Sequence[str]) -> List[Conflict]:
+    conflicts: List[Conflict] = []
+    for container_name in _expected_container_names(services):
+        exists, same_project = _inspect_docker_resource("container", container_name)
+        if exists and not same_project:
+            conflicts.append(
+                Conflict("container", container_name, "контейнер із таким імʼям вже існує")
+            )
+
+    for network_name in _expected_network_names():
+        exists, same_project = _inspect_docker_resource("network", network_name)
+        if exists and not same_project:
+            conflicts.append(Conflict("network", network_name, "мережа з таким імʼям вже існує"))
+
+    for volume_name in _expected_volume_names():
+        exists, same_project = _inspect_docker_resource("volume", volume_name)
+        if exists and not same_project:
+            conflicts.append(Conflict("volume", volume_name, "том з таким імʼям вже існує"))
+    return conflicts
+
+
+def _remove_conflict(conflict: Conflict) -> bool:
+    if conflict.resource_type == "container":
+        cmd = ["docker", "rm", "-f", conflict.name]
+    elif conflict.resource_type == "network":
+        cmd = ["docker", "network", "rm", conflict.name]
+    else:
+        cmd = ["docker", "volume", "rm", conflict.name]
+
+    result = subprocess.run(cmd, text=True)
+    if result.returncode == 0:
+        print_success(f"{conflict.resource_type} {conflict.name} видалено")
+        return True
+    print_error(f"Не вдалося видалити {conflict.resource_type} {conflict.name}")
+    return False
+
+
+def prompt_conflict_resolution(conflicts: List[Conflict]) -> None:
+    print_warning("Знайдено ресурси Docker з конфліктними іменами:")
+    while conflicts:
+        for idx, conflict in enumerate(conflicts, start=1):
+            print(
+                f"  [{idx}] {conflict.resource_type}: {conflict.name} ({conflict.note})"
+            )
+        print("  [a] Видалити всі конфлікти")
+        print("  [q] Вийти без деплою")
+        try:
+            choice = input("Оберіть пункт меню: ").strip().lower()
+        except EOFError:
+            print_error("Неможливо прочитати ввід. Припинення деплою.")
+            sys.exit(1)
+
+        if choice == "q":
+            print_error("Деплой скасовано користувачем.")
+            sys.exit(1)
+        if choice == "a":
+            remaining = []
+            for conflict in conflicts:
+                if not _remove_conflict(conflict):
+                    remaining.append(conflict)
+            conflicts = remaining
+            continue
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(conflicts):
+                conflict = conflicts[idx]
+                if _remove_conflict(conflict):
+                    conflicts.pop(idx)
+                continue
+        print_warning("Невірний вибір меню. Спробуйте ще раз.")
+
+
 def main() -> None:
     args = parse_args()
     print_header()
@@ -289,6 +445,10 @@ def main() -> None:
     check_prerequisites()
 
     services = SERVICES_DB_ONLY if args.db_only else SERVICES_FULL
+    conflicts = detect_name_conflicts(services)
+    if conflicts:
+        prompt_conflict_resolution(conflicts)
+
     run_compose(services, build=not args.skip_build)
 
     if not args.no_wait:

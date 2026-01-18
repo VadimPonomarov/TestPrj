@@ -25,13 +25,25 @@ The parser is exposed via the REST API defined in `parser_app.views`.
 
 ### 1. Scrape a Brain.com.ua product
 
-`POST /api/products/scrape/`
+Scrape endpoints:
+
+- `POST /api/products/scrape/bs4/`
+- `POST /api/products/scrape/selenium/`
+- `POST /api/products/scrape/playwright/`
 
 Request body:
 
 ```json
 {
   "url": "https://brain.com.ua/ua/product-page-url"
+}
+```
+
+For Selenium/Playwright parsers, use the query-driven workflow:
+
+```json
+{
+  "query": "Apple iPhone 15 128GB Black"
 }
 ```
 

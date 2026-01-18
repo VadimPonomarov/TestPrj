@@ -87,15 +87,21 @@ scrapy crawl brain_bs4 -a "urls=https://brain.com.ua/ukr/Mobilniy_telefon_Apple_
 
 ```powershell
 $env:DJANGO_SETTINGS_MODULE = "config.settings"
-scrapy crawl brain_selenium -a "urls=..."
+scrapy crawl brain_selenium -a "query=Apple iPhone 15 128GB Black"
 
 $env:DJANGO_SETTINGS_MODULE = "config.settings"
-scrapy crawl brain_playwright -a "urls=..."
+scrapy crawl brain_playwright -a "query=Apple iPhone 15 128GB Black"
 ```
 
 > Selenium/Playwright вимагають встановлених драйверів/браузерів.
 
 ### 2. Зберегти результати у файл (JSON/CSV)
+
+За замовчуванням Scrapy експортує результати у CSV:
+
+- `outputs/%(name)s_%(time)s.csv` (префікс = імʼя павука)
+
+Щоб перевизначити формат/файл, використайте змінні оточення.
 
 Scrapy підтримує експорти напряму. Наприклад, JSON:
 

@@ -9,6 +9,13 @@ from core.schemas import ProductData
 from parser_app.models import Product
 
 
+SCRAPE_URL_NAMES = {
+    "bs4": "product-scrape-bs4",
+    "selenium": "product-scrape-selenium",
+    "playwright": "product-scrape-playwright",
+}
+
+
 @pytest.fixture()
 def api_client():
     return APIClient()
@@ -145,21 +152,20 @@ def test_export_csv(api_client, settings, tmp_path, product_payload):
 
 @pytest.mark.django_db
 def test_scrape_requires_url_or_query(api_client):
-    url = reverse("product-scrape", kwargs={"parser_type": "bs4"})
-    resp = api_client.post(url, data={"url": ""}, format="json")
+    url = reverse("product-scrape-bs4")
+    resp = api_client.post(url, data={"query": "iphone"}, format="json")
     assert resp.status_code == 400
 
 
 @pytest.mark.django_db
 def test_scrape_invalid_parser_type(api_client):
-    url = reverse("product-scrape", kwargs={"parser_type": "invalid"})
+    url = reverse("product-scrape-bs4").replace("bs4", "invalid")
     resp = api_client.post(
         url,
         data={"url": "https://example.com/products/invalid"},
         format="json",
     )
-    assert resp.status_code == 400
-    assert "detail" in resp.data
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
@@ -183,7 +189,7 @@ def test_scrape_accepts_empty_body_and_uses_default_url(api_client, mocker):
     mocker.patch("parser_app.views.get_parser", return_value=parser)
     mocker.patch("parser_app.views.format_product_output", return_value="")
 
-    url = reverse("product-scrape", kwargs={"parser_type": "bs4"})
+    url = reverse("product-scrape-bs4")
     resp = api_client.post(url, data={}, format="json")
     assert resp.status_code in (200, 201)
     assert resp.data["product_code"] == "DEFAULT-1"
@@ -219,7 +225,7 @@ def test_scrape_creates_or_updates_product(api_client, mocker):
     mocker.patch("parser_app.views.get_parser", return_value=_Parser())
     mocker.patch("parser_app.views.format_product_output", return_value="")
 
-    url = reverse("product-scrape", kwargs={"parser_type": "bs4"})
+    url = reverse("product-scrape-bs4")
     resp = api_client.post(
         url, data={"url": "https://example.com/scraped"}, format="json"
     )
@@ -263,8 +269,13 @@ def test_scrape_success_for_all_parsers(api_client, mocker, parser_type):
     mocker.patch("parser_app.views.get_parser", return_value=_Parser())
     mocker.patch("parser_app.views.format_product_output", return_value="")
 
-    url = reverse("product-scrape", kwargs={"parser_type": parser_type})
-    resp = api_client.post(url, data={"url": "https://example.com/scraped"}, format="json")
+    url = reverse(SCRAPE_URL_NAMES[parser_type])
+    payload = (
+        {"url": "https://example.com/scraped"}
+        if parser_type == "bs4"
+        else {"query": "Apple iPhone 15 128GB Black"}
+    )
+    resp = api_client.post(url, data=payload, format="json")
     assert resp.status_code in (200, 201)
     assert resp.data["manufacturer"] == "Apple"
     assert resp.data["images"]
@@ -286,8 +297,13 @@ def test_scrape_rejects_incomplete_payload_and_does_not_write_db(api_client, moc
     parser.logger = logger
     mocker.patch("parser_app.views.get_parser", return_value=parser)
 
-    url = reverse("product-scrape", kwargs={"parser_type": parser_type})
-    resp = api_client.post(url, data={"url": "https://example.com/incomplete"}, format="json")
+    url = reverse(SCRAPE_URL_NAMES[parser_type])
+    payload = (
+        {"url": "https://example.com/incomplete"}
+        if parser_type == "bs4"
+        else {"query": "Apple iPhone 15 128GB Black"}
+    )
+    resp = api_client.post(url, data=payload, format="json")
     assert resp.status_code == 400
     assert resp.data["detail"] == "Parsed product is missing required fields."
     assert "missing" in resp.data
@@ -313,8 +329,13 @@ def test_scrape_requires_price_and_does_not_write_db(api_client, mocker, parser_
     parser = _Parser()
     parser.logger = logger
     mocker.patch("parser_app.views.get_parser", return_value=parser)
-    url = reverse("product-scrape", kwargs={"parser_type": parser_type})
-    resp = api_client.post(url, data={"url": "https://example.com/noprice"}, format="json")
+    url = reverse(SCRAPE_URL_NAMES[parser_type])
+    payload = (
+        {"url": "https://example.com/noprice"}
+        if parser_type == "bs4"
+        else {"query": "Apple iPhone 15 128GB Black"}
+    )
+    resp = api_client.post(url, data=payload, format="json")
     assert resp.status_code == 400
     assert resp.data["detail"] == "Parsed product is missing required fields."
     assert "price" in resp.data.get("missing", [])
@@ -342,12 +363,18 @@ def test_scrape_allows_optional_fields_missing_and_persists_defaults_on_create(a
     mocker.patch("parser_app.views.get_parser", return_value=parser)
     mocker.patch("parser_app.views.format_product_output", return_value="")
 
-    url = reverse("product-scrape", kwargs={"parser_type": parser_type})
-    resp = api_client.post(url, data={"url": "https://example.com/partial"}, format="json")
+    url = reverse(SCRAPE_URL_NAMES[parser_type])
+    payload = (
+        {"url": "https://example.com/partial"}
+        if parser_type == "bs4"
+        else {"query": "Apple iPhone 15 128GB Black"}
+    )
+    resp = api_client.post(url, data=payload, format="json")
     assert resp.status_code in (200, 201)
     assert resp.data["name"] == "Partial"
     assert resp.data["product_code"] == f"PARTIAL-{parser_type}"
-    assert resp.data["source_url"] == "https://example.com/partial"
+    if parser_type == "bs4":
+        assert resp.data["source_url"] == "https://example.com/partial"
     assert resp.data["review_count"] == 0
     assert logger.info.call_count >= 1
     assert any(
@@ -370,7 +397,7 @@ def test_scrape_parser_exception_handled(api_client, mocker):
 
     mocker.patch("parser_app.views.get_parser", return_value=_Parser())
 
-    url = reverse("product-scrape", kwargs={"parser_type": "bs4"})
+    url = reverse("product-scrape-bs4")
     resp = api_client.post(
         url,
         data={"url": "https://example.com/broken"},

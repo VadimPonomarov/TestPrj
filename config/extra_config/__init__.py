@@ -14,6 +14,12 @@ from .internationalization_config import LANGUAGE_CODE, TIME_ZONE, USE_I18N, USE
 from .static_config import STATIC_URL, STATIC_ROOT, MEDIA_URL, MEDIA_ROOT, TEMP_DIR  # noqa: F401
 from .rest_framework_config import REST_FRAMEWORK  # noqa: F401
 from .swagger_config import SWAGGER_SETTINGS, SWAGGER_USE_SESSION_AUTH  # noqa: F401
+from .cors_config import (  # noqa: F401
+    CORS_ALLOWED_ORIGINS,
+    CORS_ALLOW_CREDENTIALS,
+    CORS_ALLOW_HEADERS,
+    CSRF_TRUSTED_ORIGINS,
+)
 
 __all__ = [
     "BASE_DIR",
@@ -37,4 +43,8 @@ __all__ = [
     "REST_FRAMEWORK",
     "SWAGGER_SETTINGS",
     "SWAGGER_USE_SESSION_AUTH",
+    "CORS_ALLOWED_ORIGINS",
+    "CORS_ALLOW_CREDENTIALS",
+    "CORS_ALLOW_HEADERS",
+    "CSRF_TRUSTED_ORIGINS",
 ]

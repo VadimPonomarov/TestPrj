@@ -11,6 +11,7 @@ from drf_yasg.inspectors import SwaggerAutoSchema
 from drf_yasg.utils import swagger_auto_schema
 
 from .filters import ProductFilter
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 import pandas as pd
@@ -69,30 +70,6 @@ class ProductListSchema(SwaggerAutoSchema):
         return updated
 
 
-class ProductScrapeSchema(SwaggerAutoSchema):
-    def get_path_parameters(self):
-        params = list(super().get_path_parameters())
-        parser_enum = [choice.value for choice in ParserType]
-
-        updated = []
-        for p in params:
-            if p.name == "parser_type":
-                updated.append(
-                    openapi.Parameter(
-                        name="parser_type",
-                        in_=openapi.IN_PATH,
-                        type=openapi.TYPE_STRING,
-                        required=True,
-                        description="Parser backend to execute.",
-                        enum=parser_enum,
-                    )
-                )
-            else:
-                updated.append(p)
-
-        return updated
-
-
 class ProductListCreateView(generics.ListCreateAPIView):
     """
     View for listing and creating products with filtering and pagination.
@@ -123,6 +100,8 @@ class ProductListCreateView(generics.ListCreateAPIView):
     ordering = ['-created_at']
     swagger_schema = ProductListSchema
     
+    browsable_renderer_formats = {"api", "html"}
+
     def get_queryset(self):
         return super().get_queryset().order_by('-created_at')
 
@@ -145,6 +124,24 @@ class ProductListCreateView(generics.ListCreateAPIView):
     def post(self, *args, **kwargs):  # type: ignore[override]
         return super().post(*args, **kwargs)
 
+    def _is_browsable_form_request(self, request):
+        renderer = getattr(request, "accepted_renderer", None)
+        renderer_format = getattr(renderer, "format", None)
+        return renderer_format in self.browsable_renderer_formats
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except ValidationError as exc:
+            if self._is_browsable_form_request(request):
+                return Response(exc.detail, status=status.HTTP_200_OK)
+            raise
+
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
 
 class ProductRetrieveView(generics.RetrieveAPIView):
     queryset = Product.objects.all()
@@ -160,40 +157,33 @@ class ProductRetrieveView(generics.RetrieveAPIView):
         return super().get(*args, **kwargs)
 
 
-class ProductScrapeView(generics.CreateAPIView):
-    """Create or update a product by scraping data from brain.com.ua."""
+class BaseProductScrapeView(generics.CreateAPIView):
+    """Shared logic for parser-specific scraping endpoints."""
 
     serializer_class = ProductSerializer
     queryset = Product.objects.all()
-    swagger_schema = ProductScrapeSchema
+    parser_type: ParserType = ParserType.BS4
 
-    @swagger_auto_schema(
-        request_body=ProductScrapeRequestSerializer,
-        responses={200: ProductSerializer, 201: ProductSerializer},
-        operation_summary="Scrape product",
-        operation_description=(
-            "Trigger scraping for a brain.com.ua product using the selected parser backend and "
-            "return the resulting product instance."
-        ),
-        tags=["Scrappers"],
-    )
+    def get_parser_type(self) -> ParserType:
+        if isinstance(self.parser_type, ParserType):
+            return self.parser_type
+        return ParserType.from_string(str(self.parser_type))
+
     def post(self, request, *args, **kwargs):
         return self.create(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-        serializer = ProductScrapeRequestSerializer(data=request.data)
+        parser_type = self.get_parser_type()
+        serializer = ProductScrapeRequestSerializer(
+            data=request.data,
+            context={"parser_type": parser_type},
+        )
         serializer.is_valid(raise_exception=True)
 
-        parser_type_kwarg = kwargs.get("parser_type")
         validated = serializer.validated_data
-        parser_type_raw = parser_type_kwarg or ParserType.BS4.value
-        try:
-            parser_type = ParserType.from_string(parser_type_raw)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
         url = validated.get("url")
         query = validated.get("query")
+
         if not url and not query:
             return Response(
                 {"detail": "Either 'url' or 'query' must be provided."},
@@ -273,6 +263,90 @@ class ProductScrapeView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
             headers=headers,
         )
+
+
+class ProductScrapeBS4View(BaseProductScrapeView):
+    parser_type = ParserType.BS4
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "url": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format=openapi.FORMAT_URI,
+                    description="Повний URL brain.com.ua (обов'язково для BeautifulSoup).",
+                    example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[
+                        ParserType.BS4.value
+                    ]["url"],
+                )
+            },
+            required=["url"],
+            example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[ParserType.BS4.value],
+        ),
+        responses={200: ProductSerializer, 201: ProductSerializer},
+        operation_summary="Scrape product via BeautifulSoup",
+        operation_description="Парсинг конкретного URL brain.com.ua за допомогою статичного BS4 парсера.",
+        tags=["Scrappers"],
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class ProductScrapeSeleniumView(BaseProductScrapeView):
+    parser_type = ParserType.SELENIUM
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "query": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Пошуковий запит на brain.com.ua (буде використано перший товар).",
+                    example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[
+                        ParserType.SELENIUM.value
+                    ]["query"],
+                )
+            },
+            required=["query"],
+            example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[ParserType.SELENIUM.value],
+        ),
+        responses={200: ProductSerializer, 201: ProductSerializer},
+        operation_summary="Scrape product via Selenium",
+        operation_description="Динамічний Selenium-парсер: виконує пошук за запитом, відкриває перший товар і повертає дані.",
+        tags=["Scrappers"],
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
+
+
+class ProductScrapePlaywrightView(BaseProductScrapeView):
+    parser_type = ParserType.PLAYWRIGHT
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "query": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Пошуковий запит для Playwright-парсера (береться перший результат).",
+                    example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[
+                        ParserType.PLAYWRIGHT.value
+                    ]["query"],
+                )
+            },
+            required=["query"],
+            example=ProductScrapeRequestSerializer.DEFAULT_PAYLOADS[
+                ParserType.PLAYWRIGHT.value
+            ],
+        ),
+        responses={200: ProductSerializer, 201: ProductSerializer},
+        operation_summary="Scrape product via Playwright",
+        operation_description="Playwright-парсер імітує взаємодію з сайтом: пошук за запитом та перехід до першого товару.",
+        tags=["Scrappers"],
+    )
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
 
 class ProductExportCsvView(generics.ListAPIView):

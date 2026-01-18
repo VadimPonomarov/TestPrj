@@ -27,7 +27,7 @@ def get_swagger_settings() -> dict:
         "TAGS_SORTER": "alpha",
         "DEEP_LINKING": True,
         "SHOW_EXTENSIONS": True,
-        "DEFAULT_MODEL_RENDERING": "model",
+        "DEFAULT_MODEL_RENDERING": "example",
         "DEFAULT_MODEL_DEPTH": 3,
         "VALIDATOR_URL": None if is_production else "https://validator.swagger.io/validator",
         "PERSIST_AUTH": True,

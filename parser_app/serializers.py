@@ -27,6 +27,20 @@ class ProductSerializer(BaseModelSerializer):
             "created_at",
             "updated_at",
         ]
+        extra_kwargs = {
+            **getattr(BaseModelSerializer.Meta, "extra_kwargs", {}),
+            "price": {"required": False, "allow_null": True},
+            "sale_price": {"required": False, "allow_null": True},
+            "manufacturer": {"required": False, "allow_blank": True},
+            "color": {"required": False, "allow_blank": True},
+            "storage": {"required": False, "allow_blank": True},
+            "review_count": {"required": False},
+            "screen_diagonal": {"required": False, "allow_blank": True},
+            "display_resolution": {"required": False, "allow_blank": True},
+            "images": {"required": False, "allow_null": True},
+            "characteristics": {"required": False, "allow_null": True},
+            "metadata": {"required": False, "allow_null": True},
+        }
 
 
 class ProductScrapeRequestSerializer(serializers.Serializer):
@@ -37,32 +51,23 @@ class ProductScrapeRequestSerializer(serializers.Serializer):
             "url": (
                 "https://brain.com.ua/ukr/"
                 "Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
-            ),
-            "query": "iphone 16 pro max",
+            )
         },
         ParserType.SELENIUM.value: {
-            "url": (
-                "https://brain.com.ua/ukr/"
-                "Mobilniy_telefon_Samsung_Galaxy_S24_Ultra_512GB_Black-p1264325.html"
-            ),
-            "query": "samsung galaxy s24 ultra",
+            "query": "Apple iPhone 15 128GB Black",
         },
         ParserType.PLAYWRIGHT.value: {
-            "url": (
-                "https://brain.com.ua/ukr/"
-                "Mobilniy_telefon_Xiaomi_14_Pro_512GB_Black-p1261533.html"
-            ),
-            "query": "xiaomi 14 pro",
+            "query": "Apple iPhone 15 128GB Black",
         },
     }
 
     url = serializers.URLField(
         required=False,
-        help_text="Direct product URL from brain.com.ua to scrape.",
+        help_text="Повний URL конкретного товару на brain.com.ua.",
     )
     query = serializers.CharField(
         required=False,
-        help_text="Fallback search query if direct URL is not provided.",
+        help_text="Пошуковий запит на brain.com.ua (динамічний параметр).",
     )
 
     def __init__(self, *args, **kwargs):
@@ -79,6 +84,27 @@ class ProductScrapeRequestSerializer(serializers.Serializer):
         if default_query:
             self.fields["query"].default = default_query
             self.fields["query"].initial = default_query
+
+    def validate(self, attrs):
+        parser_type = self._resolve_parser_type(self.parser_type)
+        url = attrs.get("url")
+        query = attrs.get("query")
+
+        if parser_type == ParserType.BS4.value:
+            if not url:
+                raise serializers.ValidationError(
+                    {"url": "Для BeautifulSoup парсера необхідно передати URL товару."}
+                )
+            if query:
+                raise serializers.ValidationError(
+                    {"query": "Параметр query не використовується у bs4 режимі."}
+                )
+        else:
+            if not query:
+                raise serializers.ValidationError(
+                    {"query": "Для Selenium/Playwright потрібно вказати пошуковий запит."}
+                )
+        return attrs
 
     @classmethod
     def _resolve_parser_type(cls, parser_type):
@@ -97,9 +123,7 @@ class ProductScrapeRequestSerializer(serializers.Serializer):
         defaults = cls.DEFAULT_PAYLOADS.get(parser_type_value) or {}
         return dict(defaults)
 
-    def validate(self, attrs):
-        if not attrs.get("url") and not attrs.get("query"):
-            raise serializers.ValidationError(
-                "Either 'url' or 'query' must be provided."
-            )
-        return attrs
+    @classmethod
+    def get_default_url(cls, parser_type=None):
+        payload = cls.get_default_payload(parser_type)
+        return payload.get("url")

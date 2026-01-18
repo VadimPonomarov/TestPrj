@@ -191,9 +191,16 @@ Base prefix: `/api/`
 | GET | `/products/` | List + filter + paginate products (`search`, `min_price`, `ordering`, etc.) |
 | GET | `/products/<id>/` | Retrieve product detail |
 | GET | `/products/export-csv/` | Stream CSV of all products |
-| POST | `/products/scrape/<parser_type>/` | Trigger scraper (`bs4`, `selenium`, `playwright`) |
+| POST | `/products/scrape/bs4/` | Trigger scraper via BeautifulSoup |
+| POST | `/products/scrape/selenium/` | Trigger scraper via Selenium |
+| POST | `/products/scrape/playwright/` | Trigger scraper via Playwright |
 
 **Scrape request payload**
+
+- **/products/scrape/bs4/**: `url` is required, `query` is forbidden.
+- **/products/scrape/selenium/** and **/products/scrape/playwright/**: `query` is required (site search workflow).
+
+Examples:
 
 ```json
 {
@@ -201,8 +208,11 @@ Base prefix: `/api/`
 }
 ```
 
-- `url` **or** `query` must be provided. `ProductScrapeRequestSerializer` auto
-  fills sensible defaults depending on `parser_type`.
+```json
+{
+  "query": "Apple iPhone 15 128GB Black"
+}
+```
 - Successful scraping either creates or updates a `Product` record and returns
   the serialised instance.
 
@@ -213,6 +223,13 @@ Base prefix: `/api/`
 $body = '{"url":"https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"}'
 Invoke-RestMethod -Method Post `
     -Uri "http://localhost:8000/api/products/scrape/bs4/" `
+    -ContentType "application/json" `
+    -Body $body
+
+# Scrape via Selenium/Playwright parsers (search-driven)
+$body = '{"query":"Apple iPhone 15 128GB Black"}'
+Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:8000/api/products/scrape/selenium/" `
     -ContentType "application/json" `
     -Body $body
 
@@ -250,6 +267,13 @@ Returned fields include:
 poetry run pytest
 poetry run pytest parser_app/tests/test_endpoints.py -k scrape
 ```
+
+## Scrapy integration
+
+The `scrapy_project/` folder contains Scrapy spiders that mirror the API scraping behaviour
+and persist results to the same database.
+
+- Default feed export: `outputs/%(name)s_%(time)s.csv` (can be overridden via `SCRAPY_FEED_URI`).
 
 Fixtures use DRF `APIClient` and hit real endpoints, so ensure DB/migrations are ready. For coverage add `--cov=parser_app`.
 

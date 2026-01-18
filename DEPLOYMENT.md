@@ -1,84 +1,83 @@
-# Deployment Guide (TestPrj)
+# Посібник з деплойменту (TestPrj)
 
-This document describes every option for spinning up the Brain Product Parser backend
-after cloning the repository.
-
----
-
-## 1. Prerequisites
-
-1. **Docker Desktop / Docker Engine** v24+ (with Docker Compose V2 plugin).
-2. **Python 3.11+** (needed only for the helper script).
-3. **Git** for cloning.
-4. Ports `5434`, `8000`, `80` must be available on the host.
-
-> All environment files (`.env`, `.env.local`, etc.) are part of the repository so
-> that new environments have sane defaults immediately. Adjust secrets after cloning.
+Цей документ описує всі варіанти запуску бекенду Brain Product Parser після клонування репозиторію.
 
 ---
 
-## 2. Fast path: `deploy.py`
+## 1. Передумови
 
-Once you are in the project root, run:
+1. **Docker Desktop / Docker Engine** v24+ (разом із плагіном Docker Compose V2). Docker має бути встановлений, запущений та авторизований перед стартом будь-якого сценарію деплою, інакше контейнеризація не розпочнеться.
+2. **Python 3.11+** (потрібен лише для допоміжного скрипта).
+3. **Git** для клонування.
+4. Порти `5434`, `8000`, `80` мають бути вільними на хості.
+
+> Усі файли середовища (`.env`, `.env.local` тощо) входять до репозиторію, щоб нові інсталяції одразу мали адекватні значення за замовчуванням. Налаштуйте секрети після клонування.
+
+---
+
+## 2. Швидкий шлях: `deploy.py`
+
+Перебуваючи в корені проєкту, виконайте:
 
 ```powershell
 python deploy.py
 ```
 
-What happens:
+Що відбувається:
 
-1. Confirms Docker/Docker Compose are installed.
-2. Creates missing `.env` / `.env.local` with safe defaults (tracked in git).
-3. Runs `docker compose up -d --build db web nginx`.
-4. Waits for PostgreSQL + Django containers to become healthy.
-5. Prints follow-up commands (logs, db-only workflow, Scrapy instructions).
+1. Перевіряється наявність Docker/Docker Compose.
+2. Створюються відсутні `.env` / `.env.local` із безпечними значеннями (файли відстежуються в git).
+3. Скрипт перевіряє, чи існують у Docker контейнери/мережі/томи з конфліктними назвами. Якщо такі елементи знайдено, зʼявляється меню вибору: можна видалити конкретний ресурс, усі одразу або вийти з деплою.
+4. Після усунення конфліктів виконується `docker compose up -d --build db web nginx`.
+5. Очікується, поки контейнери PostgreSQL і Django стануть здоровими.
+6. Виводяться наступні команди (логи, сценарій лише для БД, інструкції для Scrapy).
 
-### Optional flags
+### Необовʼязкові прапорці
 
 ```powershell
-python deploy.py --db-only     # start only the PostgreSQL container (local Scrapy mode)
-python deploy.py --skip-build  # reuse existing Docker images
-python deploy.py --no-wait     # do not wait for health checks
+python deploy.py --db-only     # запуск лише контейнера PostgreSQL (локальний режим Scrapy)
+python deploy.py --skip-build  # повторне використання зібраних Docker-образів
+python deploy.py --no-wait     # не чекати перевірок здоровʼя
 ```
 
 ---
 
-## 3. Manual deployment (classic Docker Compose)
+## 3. Ручний деплоймент (класичний Docker Compose)
 
 ```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-Copy-Item .env.example .env           # optional, adjust credentials if needed
-docker compose up -d --build          # spins up db + web + nginx
+Copy-Item .env.example .env           # за потреби відредагуйте облікові дані
+docker compose up -d --build          # запускає db + web + nginx
 ```
 
-Useful follow-ups:
+Корисні подальші команди:
 
 ```powershell
-docker compose logs -f web            # tail Django logs
+docker compose logs -f web            # стрічка логів Django
 docker compose exec web python manage.py createsuperuser
-docker compose down -v                # stop and remove volumes
+docker compose down -v                # зупинка контейнерів і видалення томів
 ```
 
-### Ports
+### Порти
 
-| Service | Host port | Notes |
+| Сервіс | Порт хоста | Примітки |
 | ------- | --------- | ----- |
-| db      | 5434      | PostgreSQL 14 (mapped from container 5432) |
-| web     | 8000      | Django app (Swagger at `/api/doc/`) |
-| nginx   | 80        | Optional reverse proxy |
+| db      | 5434      | PostgreSQL 14 (проксі з 5432 контейнера) |
+| web     | 8000      | Django-додаток (Swagger за `/api/doc/`) |
+| nginx   | 80        | Необовʼязковий реверс-проксі |
 
 ---
 
-## 4. DB-only workflow for local Scrapy
+## 4. Робочий процес «лише БД» для локального Scrapy
 
-1. Start only the database container:
+1. Запустіть лише контейнер бази даних:
 
    ```powershell
    docker compose up -d db
    ```
 
-2. Run Scrapy locally (PowerShell example):
+2. Запустіть Scrapy локально (приклад для PowerShell):
 
    ```powershell
    Set-Location scrapy_project
@@ -86,28 +85,28 @@ docker compose down -v                # stop and remove volumes
    scrapy crawl brain_bs4 -O output.json
    ```
 
-The `.env.local` file (tracked) already points Scrapy to `127.0.0.1:5434`.
+Файл `.env.local` (відстежується) вже вказує Scrapy на `127.0.0.1:5434`.
 
 ---
 
-## 5. Verification checklist
+## 5. Чекліст перевірки
 
-- `http://localhost:8000/api/products/` returns JSON (empty list after fresh run).
-- `http://localhost:8000/api/doc/` shows Swagger UI.
-- `docker compose ps` shows all containers in `running` state.
-- Scrapy run produces `scrapy_project/output.json` and inserts a row into the DB.
+- `http://localhost:8000/api/products/` повертає JSON (порожній список після першого запуску).
+- `http://localhost:8000/api/doc/` показує Swagger UI.
+- `docker compose ps` показує всі контейнери у стані `running`.
+- Запуск Scrapy створює `scrapy_project/output.json` і вставляє рядок у базу.
 
 ---
 
-## 6. Troubleshooting
+## 6. Усунення несправностей
 
-| Symptom | Fix |
+| Симптом | Рішення |
 | ------- | ---- |
-| `docker compose` cannot pull images | Re-login to Docker Hub or check network. |
-| `UnicodeDecodeError` during local Scrapy | Ensure you run via the repo's virtualenv and `.env.local` is in place (PG client encoding is handled automatically). |
-| `psycopg` cannot connect | Make sure Docker DB is on port `5434` and no local Postgres instance occupies the same port. |
-| Django admin/login 404 | Run `docker compose exec web python manage.py createsuperuser` to create credentials. |
-| Need to reset database | `docker compose down -v && docker compose up -d --build`. |
+| `docker compose` не може стягнути образи | Перелогіньтесь у Docker Hub або перевірте мережу. |
+| `UnicodeDecodeError` під час локального Scrapy | Запускайте через виртуальне середовище репозиторію та переконайтеся, що `.env.local` присутній (кодування PG клієнта налаштоване). |
+| `psycopg` не підʼєднується | Переконайтеся, що Docker-БД слухає порт `5434` і локальний Postgres не займає його. |
+| 404 для Django admin/login | Виконайте `docker compose exec web python manage.py createsuperuser`, щоб створити користувача. |
+| Потрібно скинути базу | `docker compose down -v && docker compose up -d --build`. |
 
-For additional context (parsers, API usage, Scrapy instructions) refer to `README.md`
-and `scrapy_project/README.uk.md`.
+Для додаткового контексту (парсери, використання API, інструкції Scrapy) зверніться до `README.md`
+та `scrapy_project/README.uk.md`.
