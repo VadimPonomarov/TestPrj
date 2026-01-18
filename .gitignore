@@ -43,8 +43,6 @@ staticfiles/
 *.log
 local_settings.py
 
-# Docker
-
 # Node
 node_modules/
 npm-debug.log*
