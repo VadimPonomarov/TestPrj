@@ -1,0 +1,305 @@
+{
+  "info": {
+    "name": "TestPrj API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "4a4c6e30-0e30-4d63-9c76-1a65a7e5f6c9",
+    "description": "Collection covering scrape workflows for bs4/selenium/playwright parsers and product verification."
+  },
+  "item": [
+    {
+      "name": "List products",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/products/",
+          "host": ["{{base_url}}"],
+          "path": ["products", ""],
+          "query": []
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Scrape product (bs4)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/products/scrape/bs4/",
+          "host": ["{{base_url}}"],
+          "path": ["products", "scrape", "bs4", ""]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200 or 201\", function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "pm.environment.set(\"product_id\", json.id);",
+              "",
+              "pm.test(\"has required fields\", function () {",
+              "  pm.expect(json).to.have.property(\"product_code\");",
+              "  pm.expect(json).to.have.property(\"source_url\");",
+              "  pm.expect(json).to.have.property(\"price\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Scrape product (selenium)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/products/scrape/selenium/",
+          "host": ["{{base_url}}"],
+          "path": ["products", "scrape", "selenium", ""]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200 or 201\", function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.environment.set(\"product_id\", json.id);"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Scrape product (playwright)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/products/scrape/playwright/",
+          "host": ["{{base_url}}"],
+          "path": ["products", "scrape", "playwright", ""]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200 or 201\", function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.environment.set(\"product_id\", json.id);"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Get product by id",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/products/{{product_id}}/",
+          "host": ["{{base_url}}"],
+          "path": ["products", "{{product_id}}", ""]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test(\"id matches env\", function () {",
+              "  pm.expect(String(json.id)).to.equal(String(pm.environment.get(\"product_id\")));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Export CSV",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/csv"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/products/export-csv/",
+          "host": ["{{base_url}}"],
+          "path": ["products", "export-csv", ""]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"status 200\", function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Content-Type looks like CSV\", function () {",
+              "  const ct = pm.response.headers.get(\"Content-Type\") || \"\";",
+              "  pm.expect(ct.toLowerCase()).to.include(\"text/csv\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Negative cases",
+      "item": [
+        {
+          "name": "bs4 forbids query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/products/scrape/bs4/",
+              "host": ["{{base_url}}"],
+              "path": ["products", "scrape", "bs4", ""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "selenium requires query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/products/scrape/selenium/",
+              "host": ["{{base_url}}"],
+              "path": ["products", "scrape", "selenium", ""]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}
