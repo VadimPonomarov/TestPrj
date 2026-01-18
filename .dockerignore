@@ -20,9 +20,8 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment variables (tracked for portability)
+# Environment variables
 .env*
-!.env.docker
 
 # Virtual environment
 venv/
@@ -44,6 +43,8 @@ staticfiles/
 local_settings.py
 
 # Docker
+Dockerfile
+.dockerignore
 
 # Node
 node_modules/
@@ -85,6 +86,12 @@ temp/
 *.pyd
 .Python
 .venv/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.py[cod]
+*$py.class
 
 # Django
 *.log
@@ -105,60 +112,5 @@ logs/
 *.swp
 *~
 
-# Poetry
-poetry.lock
-
-# VS Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-
-# Database
-db.sqlite3
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Local development
-.env.local
-.env.*.local
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-
-# Project specific
-mediafiles/
-staticfiles/
-
-# Local development
-.venv/
-
-# Project specific
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Project specific
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Logs
-logs/
-*.log
-
-# Local development
-*.local
-
-# Project specific
-*.bak
-*.backup
-*.swp
-*~
+# Scrapy project excluded from Docker build context
+scrapy_project/

@@ -8,7 +8,7 @@
 
 1. Встановлені Python 3.12+ та Poetry (або pip).
 2. Залежності бекенду встановлені: `poetry install` (або `pip install -r requirements.txt`).
-3. Налаштований `.env` / `DJANGO_SETTINGS_MODULE` (за замовчуванням `config.settings`).
+3. Налаштовані змінні оточення (`DJANGO_SETTINGS_MODULE`, `SQL_*`) через `.env.local` (локально) або `.env.docker` (Docker).
 4. PostgreSQL запущений (локально чи через `docker compose up db web`).
 5. Опційно: встановлені браузерні залежності для Selenium/Playwright парсерів.
 
@@ -31,9 +31,9 @@ playwright install-deps
 > **Увага:** Ці залежності встановлюються тільки для локального середовища розробки.
 > Вони не будуть впливати на Docker-контейнери, оскільки Scrapy-павуки виконуються локально.
 
-### .env проти .env.local
+### .env.docker проти .env.local
 
-Базовий `.env` містить налаштування для Docker (`SQL_HOST=db`, `SQL_PORT=5432`). Для локальних Scrapy-запусків створіть `.env.local`, який підхоплюється автоматично (і ігнорується в контейнерах):
+`.env.docker` містить налаштування для Docker (`SQL_HOST=db`, `SQL_PORT=5432`). Для локальних Scrapy-запусків використовуйте `.env.local`, який підхоплюється автоматично:
 
 ```ini
 # .env.local
@@ -46,7 +46,7 @@ SQL_PASSWORD=mypassword
 
 > Якщо на Windows у вас уже працює локальний PostgreSQL, він часто займає `5433`. У такому випадку використовуйте інший порт для Docker (у цьому проєкті: `5434`).
 
-Таким чином Docker продовжує використовувати `.env`, а локальний Scrapy бере підключення з `.env.local`, без ручного перевизначення змінних у PowerShell.
+Таким чином Docker використовує `.env.docker`, а локальний Scrapy бере підключення з `.env.local`, без ручного перевизначення змінних у PowerShell.
 
 > Кожен павук пише логіку у БД через `ProductSerializer`, тож міграції
 > (`python manage.py migrate`) мають бути застосовані перед запуском.

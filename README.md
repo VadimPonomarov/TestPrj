@@ -79,14 +79,33 @@ pytest.ini             # Pytest configuration
 
 ## Cloning & local setup
 
+### Option A (recommended): local run without Docker (`deploy.local.py`)
+
+Prerequisites:
+
+- Python 3.12+
+- Poetry
+- PostgreSQL running locally (default: `127.0.0.1:5432`) or Docker DB on `127.0.0.1:5434`
+
 ```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-Copy-Item .env.example .env        # adjust DB credentials, secrets, etc.
-poetry install                     # or: pip install -r requirements.txt
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8000
+python deploy.local.py
 ```
+
+### Option B: manual local run
+
+```powershell
+# create/edit .env.local (local environment)
+# minimal required keys: DEBUG, SECRET_KEY, DJANGO_ALLOWED_HOSTS, SQL_*
+poetry install
+poetry run python manage.py wait_db --timeout=60 --interval=1
+poetry run python manage.py migrate
+poetry run python manage.py collectstatic --noinput --clear
+poetry run python manage.py runserver 127.0.0.1:8000
+```
+
+See **`DEPLOYMENT.md`** for a full local/no-Docker walkthrough (including using Docker DB with local Django).
 
 **Helpful commands**
 
@@ -96,12 +115,12 @@ poetry run python manage.py runserver 0.0.0.0:8000
 
 ## Running with Docker Compose
 
-Prerequisites: Docker ≥ 24, Compose v2, `.env` configured.
+Prerequisites: Docker ≥ 24, Compose v2, `.env.docker` configured.
 
 ```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-Copy-Item .env.example .env
+# edit .env.docker if you need custom credentials
 docker compose up --build
 ```
 
@@ -151,12 +170,12 @@ Only PostgreSQL runs in Docker; Django/DRF stays idle. The spiders still reuse t
 | Variable | Description | Default |
 | -------- | ----------- | ------- |
 | `DJANGO_SETTINGS_MODULE` | Django settings module | `config.settings` |
-| `DATABASE_URL` / `POSTGRES_*` | DB credentials | see `.env.example` |
+| `SQL_*` / `POSTGRES_*` | DB credentials | see `.env.docker` (Docker) or `.env.local` (local) |
 | `SWAGGER_DEFAULT_API_URL` | Base URL shown in Swagger | `http://localhost` |
 | `IS_DOCKER` | Enables Docker-specific tweaks (e.g., wait_db) | `false` |
 | `TEMP_DIR` | Directory for CSV exports | `temp/` |
 
-Update `.env` or Docker Compose overrides to match your environment (Playwright requires Chromium dependencies if you enable that parser).
+Update `.env.docker` (Docker) or `.env.local` (local) to match your environment (Playwright requires Chromium dependencies if you enable that parser).
 
 ## Database & static assets
 

@@ -4,7 +4,7 @@
 Features
 ========
 * Verifies required tooling (Docker + Docker Compose).
-* Ensures `.env` and `.env.local` exist (creating sane defaults when missing).
+* Ensures `.env.docker` and `.env.local` exist (creating sane defaults when missing).
 * Runs `docker compose up` with clear step-by-step indication.
 * Waits for critical services (db/web) to become ready.
 * Prints manual instructions for alternative workflows (db-only, local Scrapy).
@@ -36,7 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 
 MANDATORY_ENV_FILES: List[tuple[str, str]] = [
     (
-        ".env",
+        ".env.docker",
         textwrap.dedent(
             """
             # Default Django settings (override as needed)
@@ -48,14 +48,19 @@ MANDATORY_ENV_FILES: List[tuple[str, str]] = [
             POSTGRES_DB=mydb
             POSTGRES_USER=myuser
             POSTGRES_PASSWORD=mypassword
-            POSTGRES_HOST=db
-            POSTGRES_PORT=5432
 
+            SQL_ENGINE=django.db.backends.postgresql
             SQL_DATABASE=mydb
             SQL_USER=myuser
             SQL_PASSWORD=mypassword
             SQL_HOST=db
             SQL_PORT=5432
+
+            PLAYWRIGHT_PROXY_SERVER=
+            PLAYWRIGHT_PROXY_USERNAME=
+            PLAYWRIGHT_PROXY_PASSWORD=
+
+            SELENIUM_PROXY_SERVER=
             """
         ).strip()
         + "\n",
@@ -440,7 +445,7 @@ def main() -> None:
         for env_name in created_envs:
             print_warning(f"Created missing {env_name}. Review and adjust credentials before continuing.")
     else:
-        print_success("All mandatory .env files present")
+        print_success("All mandatory env files present")
 
     check_prerequisites()
 

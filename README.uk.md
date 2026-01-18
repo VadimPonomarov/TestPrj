@@ -73,14 +73,33 @@ pytest.ini             # Налаштування pytest
 
 ## Клонування та локальний запуск
 
+### Варіант A (рекомендовано): локальний запуск без Docker (`deploy.local.py`)
+
+Передумови:
+
+- Python 3.12+
+- Poetry
+- PostgreSQL локально (за замовчуванням: `127.0.0.1:5432`) або Docker-БД на `127.0.0.1:5434`
+
 ```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-Copy-Item .env.example .env      # оновіть креденшіали БД
-poetry install
-poetry run python manage.py migrate
-poetry run python manage.py runserver 0.0.0.0:8000
+python deploy.local.py
 ```
+
+### Варіант B: ручний локальний запуск
+
+```powershell
+# створіть/відредагуйте .env.local (локальне середовище)
+# мінімально потрібні ключі: DEBUG, SECRET_KEY, DJANGO_ALLOWED_HOSTS, SQL_*
+poetry install
+poetry run python manage.py wait_db --timeout=60 --interval=1
+poetry run python manage.py migrate
+poetry run python manage.py collectstatic --noinput --clear
+poetry run python manage.py runserver 127.0.0.1:8000
+```
+
+Повний гайд для локального/no-Docker режиму див. у **`DEPLOYMENT.md`**.
 
 Корисні команди:
 
@@ -90,12 +109,12 @@ poetry run python manage.py runserver 0.0.0.0:8000
 
 ## Запуск через Docker Compose
 
-Передумови: Docker ≥ 24, Compose v2, налаштований `.env`.
+Передумови: Docker ≥ 24, Compose v2, налаштований `.env.docker`.
 
 ```powershell
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-Copy-Item .env.example .env
+# за потреби відредагуйте .env.docker
 docker compose up --build
 ```
 
@@ -112,7 +131,7 @@ docker compose up --build
 | Змінна | Опис | Значення за замовчуванням |
 | ------ | ---- | ------------------------ |
 | `DJANGO_SETTINGS_MODULE` | Модуль налаштувань | `config.settings` |
-| `DATABASE_URL` / `POSTGRES_*` | Доступ до БД | див. `.env.example` |
+| `SQL_*` / `POSTGRES_*` | Доступ до БД | див. `.env.docker` (Docker) або `.env.local` (локально) |
 | `SWAGGER_DEFAULT_API_URL` | Базовий URL у Swagger | `http://localhost` |
 | `IS_DOCKER` | Активація docker-режиму | `false` |
 | `TEMP_DIR` | Тимчасова папка для CSV | `temp/` |

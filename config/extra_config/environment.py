@@ -14,14 +14,17 @@ else:
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ROOT_DIR = BASE_DIR
 
-ENV_FILES: Iterable[Tuple[Path, bool]] = (
-    (ROOT_DIR / ".env", False),
-    (ROOT_DIR / ".env.local", True),
-)
+ENV_FILES: Iterable[Tuple[Path, bool]]
+if os.getenv("IS_DOCKER"):
+    ENV_FILES = (
+        (ROOT_DIR / ".env.docker", False),
+    )
+else:
+    ENV_FILES = (
+        (ROOT_DIR / ".env.local", False),
+    )
 
 def _should_load(env_file: Path) -> bool:
-    if env_file.name == ".env.local" and os.getenv("IS_DOCKER"):
-        return False
     return env_file.exists()
 
 
