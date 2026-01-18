@@ -58,7 +58,7 @@
 
 ## Tech stack
 
-- Python 3.11, Django 5, Django REST Framework
+- Python 3.12, Django 5, Django REST Framework
 - PostgreSQL 14
 - Docker & Docker Compose
 - Parsing libs: BeautifulSoup, optional Selenium & Playwright
@@ -109,7 +109,7 @@ Services:
 
 | Service | Port | Description |
 | ------- | ---- | ----------- |
-| `db`    | 5433 | PostgreSQL 14 with health check |
+| `db`    | 5434 | PostgreSQL 14 with health check |
 | `web`   | 8000 | Django app (autoreloads in dev) |
 | `nginx` | 80   | Optional reverse proxy exposing static/media and forwarding to `web` |
 
@@ -175,9 +175,13 @@ docker compose up
 
 ## Accessing the API & Swagger UI
 
-- Swagger UI: `http://localhost:8000/api/doc/`
-- ReDoc: `http://localhost:8000/api/redoc/`
-- Raw schema: `http://localhost:8000/api/doc.json`
+- Direct (web):
+  - Swagger UI: `http://localhost:8000/api/doc/`
+  - ReDoc: `http://localhost:8000/api/redoc/`
+  - Raw schema: `http://localhost:8000/api/doc.json`
+- Via Nginx (if enabled):
+  - Swagger UI: `http://localhost/api/doc/`
+  - ReDoc: `http://localhost/api/redoc/`
 
 Root `/` redirects to Swagger UI by default (see `config/urls.py`).
 
@@ -190,7 +194,7 @@ Base prefix: `/api/`
 | POST | `/products/` | Create product manually |
 | GET | `/products/` | List + filter + paginate products (`search`, `min_price`, `ordering`, etc.) |
 | GET | `/products/<id>/` | Retrieve product detail |
-| GET | `/products/export-csv/` | Stream CSV of all products |
+| GET | `/products/export-csv/` | Export CSV (supports the same filters and ordering as listing) |
 | POST | `/products/scrape/bs4/` | Trigger scraper via BeautifulSoup |
 | POST | `/products/scrape/selenium/` | Trigger scraper via Selenium |
 | POST | `/products/scrape/playwright/` | Trigger scraper via Playwright |

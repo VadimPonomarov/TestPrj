@@ -6,7 +6,7 @@
 
 ## Передумови
 
-1. Встановлені Python 3.11+ та Poetry (або pip).
+1. Встановлені Python 3.12+ та Poetry (або pip).
 2. Залежності бекенду встановлені: `poetry install` (або `pip install -r requirements.txt`).
 3. Налаштований `.env` / `DJANGO_SETTINGS_MODULE` (за замовчуванням `config.settings`).
 4. PostgreSQL запущений (локально чи через `docker compose up db web`).
@@ -152,6 +152,9 @@ API та Scrapy користуються однією моделлю `Product`, 
    - Виконайте павука `scrapy crawl brain_bs4 ...`.
    - Переконайтесь, що `/api/products/` повертає новий запис і що `export-csv`
      віддає файл.
+
+> Для швидкої перевірки того, що нічого не зламалося (без зовнішніх HTTP-запитів),
+> використовуйте `scrapy list` та `scrapy check`.
 
 > Якщо тестовий запуск падає через `ModuleNotFoundError: django`, переконайтесь,
 > що активоване віртуальне середовище/Poetry shell або використовуйте `poetry run ...`.

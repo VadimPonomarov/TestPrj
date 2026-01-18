@@ -355,6 +355,8 @@ class ProductExportCsvView(generics.ListAPIView):
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ProductFilter
+    ordering_fields = ["name", "price", "created_at", "updated_at"]
+    ordering = ["-created_at"]
     swagger_schema = ProductListSchema
     
     def get_queryset(self):
@@ -387,7 +389,7 @@ class ProductExportCsvView(generics.ListAPIView):
             "updated_at",
         ]
 
-        queryset = self.get_queryset().values(*fields)
+        queryset = self.filter_queryset(self.get_queryset()).values(*fields)
         records = []
         for product in queryset:
             record = {}

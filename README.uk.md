@@ -52,7 +52,7 @@
 
 ## Стек технологій
 
-- Python 3.11, Django 5, Django REST Framework
+- Python 3.12, Django 5, Django REST Framework
 - PostgreSQL 14
 - Docker / Docker Compose
 - BeautifulSoup, Selenium, Playwright (опційно)
@@ -131,9 +131,13 @@ poetry run python manage.py createsuperuser
 
 ## Доступ до API та Swagger
 
-- Swagger UI: `http://localhost:8000/api/doc/`
-- ReDoc: `http://localhost:8000/api/redoc/`
-- JSON/YAМL схема: `/api/doc.json`, `/api/doc.yaml`
+- Напряму (web):
+  - Swagger UI: `http://localhost:8000/api/doc/`
+  - ReDoc: `http://localhost:8000/api/redoc/`
+  - JSON/YAМL схема: `/api/doc.json`, `/api/doc.yaml`
+- Через Nginx (якщо ввімкнений):
+  - Swagger UI: `http://localhost/api/doc/`
+  - ReDoc: `http://localhost/api/redoc/`
 
 Головна сторінка (`/`) редіректить на Swagger.
 
@@ -146,7 +150,7 @@ poetry run python manage.py createsuperuser
 | POST | `/products/` | Створення продукту вручну |
 | GET | `/products/` | Список з пошуком, фільтрами, пагінацією |
 | GET | `/products/<id>/` | Деталі продукту |
-| GET | `/products/export-csv/` | Експорт CSV |
+| GET | `/products/export-csv/` | Експорт CSV (підтримує ті ж фільтри/ordering, що й список) |
 | POST | `/products/scrape/bs4/` | Запуск BS4 парсера |
 | POST | `/products/scrape/selenium/` | Запуск Selenium парсера |
 | POST | `/products/scrape/playwright/` | Запуск Playwright парсера |

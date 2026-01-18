@@ -1,6 +1,6 @@
 # Postman tests (API validation)
 
-This guide explains how to validate the API via Postman using environment variables and simple test scripts.
+This guide explains how to validate the API via Postman using environment variables and test scripts.
 
 ## Preconditions
 
@@ -20,160 +20,49 @@ Import them in Postman (File → Import → Upload Files). The environment alrea
 
 - `base_url` – `http://localhost:8000/api`
 - `bs4_url` – a sample product URL
+- `bs4_url_2` – a second sample product URL
 - `search_query` – `Apple iPhone 15 128GB Black`
+- `search_query_2` – a second search query
 - `product_id` – pre-created but empty (tests will fill it)
+- `product_id_2` – secondary id slot used by selenium flow
+- `product_code`, `manufacturer`, `price_1`, `price_2` – populated from scrape responses
+- `invalid_url` – invalid URL value for negative tests
 
 ## Requests covered by the collection
 
-The collection (`TestPrj API`) contains the following sequence:
+The collection (`TestPrj API`) contains the following groups:
 
-### 1) Health / Docs
+### 00) Init
 
-(Optional)
+- Initializes deterministic run variables (generates `run_id`, `manual_code_*`, `manual_name_*`).
 
-- `GET {{base_url}}/products/`
+### 01) CRUD (manual deterministic)
 
-Tests:
+- Creates 2 products via `POST /products/` with predictable `product_code` and `price`.
+- Verifies:
+  - listing with `product_code__icontains={{run_id}}`
+  - ordering by `price`
+  - filtering via `min_price`
+  - pagination envelope and `page_size` behaviour
 
-```javascript
-pm.test("status 200", function () {
-  pm.response.to.have.status(200);
-});
-```
+This part is intentionally independent from scrapers to keep filter/sort tests stable.
 
-### 2) Scrape (bs4)
+### 02) Scrape (parsers)
 
-- `POST {{base_url}}/products/scrape/bs4/`
-- Body (raw JSON):
+- `POST /products/scrape/bs4/` (twice: expects `201` then `200` with stable id)
+- `POST /products/scrape/selenium/`
+- `POST /products/scrape/playwright/`
 
-```json
-{
-  "url": "{{bs4_url}}"
-}
-```
+### 03) Export
 
-Tests:
+- `GET /products/export-csv/` with filters and ordering, verifies:
+  - Content-Type is CSV
+  - output contains previously created manual codes
+  - ordering is applied
 
-```javascript
-pm.test("status 200 or 201", function () {
-  pm.expect([200, 201]).to.include(pm.response.code);
-});
+### 99) Negative cases
 
-const json = pm.response.json();
-pm.expect(json).to.have.property("id");
-pm.environment.set("product_id", json.id);
-
-pm.test("has required fields", function () {
-  pm.expect(json).to.have.property("product_code");
-  pm.expect(json).to.have.property("source_url");
-  pm.expect(json).to.have.property("price");
-});
-```
-
-### 3) Scrape (selenium)
-
-- `POST {{base_url}}/products/scrape/selenium/`
-- Body (raw JSON):
-
-```json
-{
-  "query": "{{search_query}}"
-}
-```
-
-Tests:
-
-```javascript
-pm.test("status 200 or 201", function () {
-  pm.expect([200, 201]).to.include(pm.response.code);
-});
-
-const json = pm.response.json();
-pm.expect(json).to.have.property("id");
-pm.environment.set("product_id", json.id);
-```
-
-### 4) Scrape (playwright)
-
-- `POST {{base_url}}/products/scrape/playwright/`
-- Body (raw JSON):
-
-```json
-{
-  "query": "{{search_query}}"
-}
-```
-
-Tests:
-
-```javascript
-pm.test("status 200 or 201", function () {
-  pm.expect([200, 201]).to.include(pm.response.code);
-});
-
-const json = pm.response.json();
-pm.expect(json).to.have.property("id");
-pm.environment.set("product_id", json.id);
-```
-
-### 5) Get product by id
-
-- `GET {{base_url}}/products/{{product_id}}/`
-
-Tests:
-
-```javascript
-pm.test("status 200", function () {
-  pm.response.to.have.status(200);
-});
-
-const json = pm.response.json();
-pm.expect(json).to.have.property("id");
-pm.expect(String(json.id)).to.equal(String(pm.environment.get("product_id")));
-```
-
-### 6) Export CSV
-
-- `GET {{base_url}}/products/export-csv/`
-
-Tests:
-
-```javascript
-pm.test("status 200", function () {
-  pm.response.to.have.status(200);
-});
-
-pm.test("content-type looks like csv", function () {
-  const ct = pm.response.headers.get("Content-Type") || "";
-  pm.expect(ct.toLowerCase()).to.include("text/csv");
-});
-```
-
-## Validation of input rules (negative tests)
-
-### bs4 forbids query
-
-- `POST {{base_url}}/products/scrape/bs4/`
-
-```json
-{
-  "query": "{{search_query}}"
-}
-```
-
-Expected: `400`.
-
-### selenium/playwright require query
-
-- `POST {{base_url}}/products/scrape/selenium/`
-
-```json
-{
-  "url": "{{bs4_url}}"
-}
-```
-
-Expected: `400`.
+- Missing/invalid payloads for scrape endpoints (expects `400`).
 
 ## Running the collection
 
@@ -194,4 +83,4 @@ newman run postman/TestPrj_API.postman_collection.json \
 ## Notes
 
 - Selenium/Playwright scraping depends on installed browser/drivers on the machine that runs the API.
-- If you run the API inside Docker without Selenium/Playwright dependencies, prefer `bs4` for smoke checks.
+- Export endpoint supports the same filters/orderings as the list endpoint.

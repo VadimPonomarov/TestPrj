@@ -7,230 +7,336 @@
   },
   "item": [
     {
-      "name": "List products",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/products/",
-          "host": ["{{base_url}}"],
-          "path": ["products", ""],
-          "query": []
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200\", function () {",
-              "  pm.response.to.have.status(200);",
-              "});"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Scrape product (bs4)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/products/scrape/bs4/",
-          "host": ["{{base_url}}"],
-          "path": ["products", "scrape", "bs4", ""]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200 or 201\", function () {",
-              "  pm.expect([200, 201]).to.include(pm.response.code);",
-              "});",
-              "",
-              "const json = pm.response.json();",
-              "pm.environment.set(\"product_id\", json.id);",
-              "",
-              "pm.test(\"has required fields\", function () {",
-              "  pm.expect(json).to.have.property(\"product_code\");",
-              "  pm.expect(json).to.have.property(\"source_url\");",
-              "  pm.expect(json).to.have.property(\"price\");",
-              "});"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Scrape product (selenium)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/products/scrape/selenium/",
-          "host": ["{{base_url}}"],
-          "path": ["products", "scrape", "selenium", ""]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200 or 201\", function () {",
-              "  pm.expect([200, 201]).to.include(pm.response.code);",
-              "});",
-              "const json = pm.response.json();",
-              "pm.environment.set(\"product_id\", json.id);"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Scrape product (playwright)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
-        },
-        "url": {
-          "raw": "{{base_url}}/products/scrape/playwright/",
-          "host": ["{{base_url}}"],
-          "path": ["products", "scrape", "playwright", ""]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200 or 201\", function () {",
-              "  pm.expect([200, 201]).to.include(pm.response.code);",
-              "});",
-              "const json = pm.response.json();",
-              "pm.environment.set(\"product_id\", json.id);"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Get product by id",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Accept",
-            "value": "application/json"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/products/{{product_id}}/",
-          "host": ["{{base_url}}"],
-          "path": ["products", "{{product_id}}", ""]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200\", function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "const json = pm.response.json();",
-              "pm.test(\"id matches env\", function () {",
-              "  pm.expect(String(json.id)).to.equal(String(pm.environment.get(\"product_id\")));",
-              "});"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Export CSV",
-      "request": {
-        "method": "GET",
-        "header": [
-          {
-            "key": "Accept",
-            "value": "text/csv"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/products/export-csv/",
-          "host": ["{{base_url}}"],
-          "path": ["products", "export-csv", ""]
-        }
-      },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "pm.test(\"status 200\", function () {",
-              "  pm.response.to.have.status(200);",
-              "});",
-              "pm.test(\"Content-Type looks like CSV\", function () {",
-              "  const ct = pm.response.headers.get(\"Content-Type\") || \"\";",
-              "  pm.expect(ct.toLowerCase()).to.include(\"text/csv\");",
-              "});"
-            ]
-          }
-        }
-      ],
-      "response": []
-    },
-    {
-      "name": "Negative cases",
+      "name": "00 - Init",
       "item": [
         {
-          "name": "bs4 forbids query",
+          "name": "Init run variables",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/?page_size=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "// Deterministic run id for this collection run",
+                  "const runId = String(Date.now());",
+                  "pm.environment.set('run_id', runId);",
+                  "pm.environment.set('manual_code_1', `PMTEST1-${runId}`);",
+                  "pm.environment.set('manual_code_2', `PMTEST2-${runId}`);",
+                  "pm.environment.set('manual_name_1', `PMTEST Product 1 ${runId}`);",
+                  "pm.environment.set('manual_name_2', `PMTEST Product 2 ${runId}`);",
+                  "pm.environment.set('manual_url_1', `https://example.com/${pm.environment.get('manual_code_1')}`);",
+                  "pm.environment.set('manual_url_2', `https://example.com/${pm.environment.get('manual_code_2')}`);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - CRUD (manual deterministic)",
+      "item": [
+        {
+          "name": "Create manual product #1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{manual_name_1}}\",\n  \"product_code\": \"{{manual_code_1}}\",\n  \"source_url\": \"{{manual_url_1}}\",\n  \"price\": \"100.00\",\n  \"manufacturer\": \"Postman\",\n  \"color\": \"Black\",\n  \"storage\": \"128GB\"\n}"
+            },
+            "url": "{{base_url}}/products/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('manual_product_id_1', json.id);",
+                  "pm.test(\"product_code matches\", function () {",
+                  "  pm.expect(json.product_code).to.eql(pm.environment.get('manual_code_1'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Create manual product #2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{manual_name_2}}\",\n  \"product_code\": \"{{manual_code_2}}\",\n  \"source_url\": \"{{manual_url_2}}\",\n  \"price\": \"200.00\",\n  \"manufacturer\": \"Postman\",\n  \"color\": \"White\",\n  \"storage\": \"256GB\"\n}"
+            },
+            "url": "{{base_url}}/products/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('manual_product_id_2', json.id);",
+                  "pm.test(\"product_code matches\", function () {",
+                  "  pm.expect(json.product_code).to.eql(pm.environment.get('manual_code_2'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "List manual products (filter by product_code__icontains=run_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/?product_code__icontains={{run_id}}&page_size=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"has pagination envelope\", function () {",
+                  "  pm.expect(json).to.have.property('results');",
+                  "  pm.expect(json).to.have.property('count');",
+                  "});",
+                  "pm.test(\"contains at least 2 manual products\", function () {",
+                  "  pm.expect(json.results.length).to.be.at.least(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Ordering manual products by price (asc)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/?product_code__icontains={{run_id}}&ordering=price&page_size=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "const prices = json.results.map(p => Number(p.price));",
+                  "pm.test(\"prices are sorted asc\", function () {",
+                  "  pm.expect(prices[0]).to.be.at.most(prices[prices.length - 1]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Filter min_price=150 (expect only product #2)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/?product_code__icontains={{run_id}}&min_price=150&page_size=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"returns only product #2\", function () {",
+                  "  const codes = json.results.map(p => p.product_code);",
+                  "  pm.expect(codes).to.include(pm.environment.get('manual_code_2'));",
+                  "  pm.expect(codes).to.not.include(pm.environment.get('manual_code_1'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Pagination page_size=1 over manual products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/products/?product_code__icontains={{run_id}}&ordering=price&page_size=1&page=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"page_size is 1\", function () {",
+                  "  pm.expect(json.page_size).to.eql(1);",
+                  "  pm.expect(json.results.length).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Scrape (parsers)",
+      "item": [
+        {
+          "name": "Scrape product (bs4)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/bs4/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200 or 201\", function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('product_id', json.id);",
+                  "pm.environment.set('product_code', json.product_code);",
+                  "pm.environment.set('manufacturer', json.manufacturer || '');",
+                  "pm.environment.set('price_1', json.price || '');",
+                  "pm.test(\"has required fields\", function () {",
+                  "  pm.expect(json).to.have.property('product_code');",
+                  "  pm.expect(json).to.have.property('source_url');",
+                  "  pm.expect(json).to.have.property('price');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Scrape product (bs4) again (id should stay the same)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/bs4/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"id stable\", function () {",
+                  "  pm.expect(String(json.id)).to.eql(String(pm.environment.get('product_id')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Scrape product (selenium)",
           "request": {
             "method": "POST",
             "header": [
@@ -243,11 +349,132 @@
               "mode": "raw",
               "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
             },
-            "url": {
-              "raw": "{{base_url}}/products/scrape/bs4/",
-              "host": ["{{base_url}}"],
-              "path": ["products", "scrape", "bs4", ""]
+            "url": "{{base_url}}/products/scrape/selenium/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200 or 201\", function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('product_id_2', json.id);",
+                  "pm.environment.set('price_2', json.price || '');"
+                ]
+              }
             }
+          ],
+          "response": []
+        },
+        {
+          "name": "Scrape product (playwright)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/playwright/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200 or 201\", function () {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test(\"has product_code\", function () {",
+                  "  pm.expect(json).to.have.property('product_code');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Export",
+      "item": [
+        {
+          "name": "Export CSV (filtered by product_code__icontains=run_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/csv"
+              }
+            ],
+            "url": "{{base_url}}/products/export-csv/?product_code__icontains={{run_id}}&ordering=price"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Type looks like CSV\", function () {",
+                  "  const ct = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(ct.toLowerCase()).to.include('text/csv');",
+                  "});",
+                  "const text = pm.response.text();",
+                  "pm.test(\"contains created manual product codes\", function () {",
+                  "  pm.expect(text).to.include(pm.environment.get('manual_code_1'));",
+                  "  pm.expect(text).to.include(pm.environment.get('manual_code_2'));",
+                  "});",
+                  "pm.test(\"csv is ordered by price asc (first row is 100.00)\", function () {",
+                  "  const lines = text.trim().split(/\r?\n/);",
+                  "  pm.expect(lines.length).to.be.at.least(2);",
+                  "  const header = lines[0].split(',');",
+                  "  const idxPrice = header.indexOf('price');",
+                  "  pm.expect(idxPrice).to.be.at.least(0);",
+                  "  const row1 = lines[1].split(',');",
+                  "  const price1 = Number(row1[idxPrice]);",
+                  "  pm.expect(price1).to.eql(100);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "99 - Negative cases",
+      "item": [
+        {
+          "name": "bs4 requires url (missing url)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{base_url}}/products/scrape/bs4/"
           },
           "event": [
             {
@@ -265,7 +492,69 @@
           "response": []
         },
         {
-          "name": "selenium requires query",
+          "name": "bs4 forbids query",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{search_query}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/bs4/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "bs4 invalid url",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{invalid_url}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/bs4/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "selenium requires query (send url)",
           "request": {
             "method": "POST",
             "header": [
@@ -278,11 +567,38 @@
               "mode": "raw",
               "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
             },
-            "url": {
-              "raw": "{{base_url}}/products/scrape/selenium/",
-              "host": ["{{base_url}}"],
-              "path": ["products", "scrape", "selenium", ""]
+            "url": "{{base_url}}/products/scrape/selenium/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
             }
+          ],
+          "response": []
+        },
+        {
+          "name": "playwright requires query (send url)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+            },
+            "url": "{{base_url}}/products/scrape/playwright/"
           },
           "event": [
             {

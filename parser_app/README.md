@@ -1,6 +1,6 @@
 # Brain.com.ua Product Parser
 
-The `parser_app.services.brain_parser.BrainProductParser` class extracts rich
+The `parser_app.services.parsers.brain.parser.BrainProductParser` class extracts rich
 product data from Brain.com.ua product pages and returns it as a structured
 Python dictionary.
 
@@ -93,7 +93,7 @@ The CSV columns mirror the API fields; complex structures (`characteristics`,
 For batch jobs or scripts you can call the parser service directly:
 
 ```python
-from parser_app.services.brain_parser import BrainProductParser, format_product_output
+from parser_app.services.parsers import BrainProductParser, format_product_output
 
 parser = BrainProductParser("https://brain.com.ua/product-page-url")
 product_data = parser.parse()
