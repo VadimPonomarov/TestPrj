@@ -21,6 +21,7 @@ wheels/
 *.egg
 
 # Environment variables (tracked for portability)
+.env*
 !.env.docker
 !.env.local
 
@@ -109,6 +110,3 @@ logs/
 
 # Project specific
 mediafiles/
-
-!poetry.lock
-
