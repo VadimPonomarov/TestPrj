@@ -91,11 +91,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="runserver host (default: 127.0.0.1)")
     parser.add_argument("--port", default="8000", help="runserver port (default: 8000)")
 
-    parser.add_argument("--db-host", default="127.0.0.1", help="PostgreSQL host")
-    parser.add_argument("--db-port", default="5432", help="PostgreSQL port")
-    parser.add_argument("--db-name", default="mydb", help="PostgreSQL database name")
-    parser.add_argument("--db-user", default="myuser", help="PostgreSQL user")
-    parser.add_argument("--db-password", default="mypassword", help="PostgreSQL password")
+    parser.add_argument("--db-host", default=None, help="PostgreSQL host (overrides .env.local)")
+    parser.add_argument("--db-port", type=int, default=None, help="PostgreSQL port (overrides .env.local)")
+    parser.add_argument("--db-name", default=None, help="PostgreSQL database name (overrides .env.local)")
+    parser.add_argument("--db-user", default=None, help="PostgreSQL user (overrides .env.local)")
+    parser.add_argument("--db-password", default=None, help="PostgreSQL password (overrides .env.local)")
 
     parser.add_argument(
         "--timeout",
@@ -207,6 +207,65 @@ def ensure_env_files(db: Dict[str, str]) -> List[str]:
     return created
 
 
+def _extract_docker_db_host_port_from_compose(compose_path: Path) -> Dict[str, str]:
+    if not compose_path.exists():
+        return {}
+
+    try:
+        lines = compose_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+
+    in_db = False
+    db_indent: int | None = None
+    for raw_line in lines:
+        line = raw_line.rstrip("\n")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+
+        if line.lstrip().startswith("db:"):
+            in_db = True
+            db_indent = len(line) - len(line.lstrip())
+            continue
+
+        if in_db and db_indent is not None:
+            current_indent = len(line) - len(line.lstrip())
+            if current_indent <= db_indent and line.strip().endswith(":"):
+                in_db = False
+                db_indent = None
+                continue
+
+            stripped = line.strip().strip("\"").strip("'")
+            if stripped.startswith("-"):
+                mapping = stripped.lstrip("-").strip().strip("\"").strip("'")
+                if ":" in mapping:
+                    left, right = mapping.split(":", 1)
+                    left = left.strip()
+                    right = right.strip()
+                    if right == "5432":
+                        return {"SQL_HOST": "127.0.0.1", "SQL_PORT": left}
+
+    return {}
+
+
+def _get_default_db_env_from_repo_files() -> Dict[str, str]:
+    docker_env_path = REPO_ROOT / ".env.docker"
+    compose_path = REPO_ROOT / "docker-compose.yml"
+
+    docker_env = _read_env_keys(docker_env_path) if docker_env_path.exists() else {}
+    compose_hint = _extract_docker_db_host_port_from_compose(compose_path)
+
+    defaults: Dict[str, str] = {
+        "SQL_HOST": "127.0.0.1",
+        "SQL_PORT": "5432",
+        "SQL_DATABASE": docker_env.get("SQL_DATABASE", "mydb"),
+        "SQL_USER": docker_env.get("SQL_USER", "myuser"),
+        "SQL_PASSWORD": docker_env.get("SQL_PASSWORD", "mypassword"),
+    }
+    defaults.update({k: v for k, v in compose_hint.items() if v})
+    return defaults
+
+
 def build_subprocess_env(db: Dict[str, str]) -> Dict[str, str]:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -231,6 +290,20 @@ def print_db_help(db: Dict[str, str]) -> None:
     for key in ("SQL_HOST", "SQL_PORT", "SQL_DATABASE", "SQL_USER"):
         print(f"  - {key}={db[key]}")
     print()
+
+    compose_path = REPO_ROOT / "docker-compose.yml"
+    if compose_path.exists():
+        docker_hint = _extract_docker_db_host_port_from_compose(compose_path)
+        host = docker_hint.get("SQL_HOST", "127.0.0.1")
+        port = docker_hint.get("SQL_PORT")
+        print("If your PostgreSQL is running in Docker:")
+        print("  1) Start it: docker compose up -d db")
+        if port:
+            print("  2) Use host connection (service name 'db' works only inside Docker):")
+            print(f"     SQL_HOST={host}")
+            print(f"     SQL_PORT={port}")
+        print()
+
     print("Example psql commands (run in an elevated shell if required):")
     print(textwrap.dedent(
         f"""
@@ -263,12 +336,16 @@ def main() -> None:
             "might be harder without PostgreSQL client tools."
         )
 
+    repo_defaults = _get_default_db_env_from_repo_files()
+    local_env_path = REPO_ROOT / ".env.local"
+    local_env = _read_env_keys(local_env_path) if local_env_path.exists() else {}
+
     db_env = {
-        "SQL_HOST": args.db_host,
-        "SQL_PORT": str(args.db_port),
-        "SQL_DATABASE": args.db_name,
-        "SQL_USER": args.db_user,
-        "SQL_PASSWORD": args.db_password,
+        "SQL_HOST": (args.db_host or local_env.get("SQL_HOST") or repo_defaults["SQL_HOST"]),
+        "SQL_PORT": str(args.db_port or local_env.get("SQL_PORT") or repo_defaults["SQL_PORT"]),
+        "SQL_DATABASE": (args.db_name or local_env.get("SQL_DATABASE") or repo_defaults["SQL_DATABASE"]),
+        "SQL_USER": (args.db_user or local_env.get("SQL_USER") or repo_defaults["SQL_USER"]),
+        "SQL_PASSWORD": (args.db_password or local_env.get("SQL_PASSWORD") or repo_defaults["SQL_PASSWORD"]),
     }
 
     print_step(2, "Ensuring .env.local")

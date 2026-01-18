@@ -141,15 +141,55 @@ python deploy.local.py --db-host 127.0.0.1 --db-port 5432 --db-name mydb --db-us
 ```
 
 #### 2) Використати Docker-БД, але запускати Django локально
-
-1. Запустіть тільки контейнер БД:
-   ```powershell
-   docker compose up -d db
-   ```
-2. Запустіть локальний деплой, вказавши порт `5434`:
-   ```powershell
-   python deploy.local.py --db-host 127.0.0.1 --db-port 5434
-   ```
+ 
+  Цей сценарій потрібен, коли **PostgreSQL крутиться в Docker**, але **Django запускається на хості** (Windows/macOS/Linux).
+ 
+  Важливо:
+  - Імʼя сервісу з `docker-compose.yml` (наприклад, `db`) працює **тільки всередині Docker мережі**.
+  - З хоста підключення має йти на **`127.0.0.1` + порт пробросу** (у цьому проєкті це `5434`).
+ 
+  1. Запустіть тільки контейнер БД:
+ 
+     ```powershell
+     docker compose up -d db
+     ```
+ 
+  2. Переконайтесь, що порт проброшено:
+ 
+     - у `docker-compose.yml` має бути мапінг `"5434:5432"` для `db`
+     - команда `docker compose ps` має показати `db` у стані `running`
+ 
+  3. Вкажіть підключення у `.env.local`:
+ 
+     ```env
+     SQL_HOST=127.0.0.1
+     SQL_PORT=5434
+     SQL_DATABASE=mydb
+     SQL_USER=myuser
+     SQL_PASSWORD=mypassword
+     ```
+ 
+     Не використовуйте в `.env.local`:
+     - `SQL_HOST=db` (працює тільки всередині Docker)
+     - `SQL_HOST=mydb` (це назва БД, а не хост)
+ 
+  4. Запустіть локальний деплой:
+ 
+     ```powershell
+     python deploy.local.py
+     ```
+ 
+     Або (якщо хочете явно перевизначити параметри без редагування `.env.local`):
+ 
+     ```powershell
+     python deploy.local.py --db-host 127.0.0.1 --db-port 5434
+     ```
+ 
+  5. Швидка перевірка підключення (опційно):
+ 
+     ```powershell
+     poetry run python manage.py wait_db --timeout=10 --interval=1
+     ```
 
 ### Примітки
 
@@ -157,7 +197,6 @@ python deploy.local.py --db-host 127.0.0.1 --db-port 5432 --db-name mydb --db-us
 - Якщо в системі вже встановлений PostgreSQL, переконайтесь, що порт `5432` не зайнятий іншою інстанцією.
 
 ---
-
 ## 7. Усунення несправностей
 
 | Симптом | Рішення |
