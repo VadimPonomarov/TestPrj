@@ -5,6 +5,7 @@ from typing import Optional
 from core.exceptions import ParserExecutionError
 from core.schemas import ProductData
 from ..base.parser import BaseBrainParser
+from ..utils.cache import get_cached_url, set_cached_url
 
 # Import from the existing parsers package
 from ...services.parsers import BrainProductParser
@@ -30,6 +31,10 @@ class PlaywrightBrainParser(BaseBrainParser):
     def _parse(self, *, query: Optional[str], url: Optional[str]) -> ProductData:
         resolved_url = url
 
+        cached_url = get_cached_url("playwright", query)
+        if not resolved_url and cached_url:
+            resolved_url = cached_url
+
         try:
             from playwright.sync_api import sync_playwright
 
@@ -45,8 +50,11 @@ class PlaywrightBrainParser(BaseBrainParser):
                 page = context.new_page()
 
                 try:
-                    if query:
+                    if query and not resolved_url:
                         resolved_url = self._resolve_product_url(page=page, query=query)
+
+                    if resolved_url and query:
+                        set_cached_url("playwright", query, resolved_url)
 
                     if not resolved_url:
                         raise ParserExecutionError(

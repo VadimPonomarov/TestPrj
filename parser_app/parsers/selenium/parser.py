@@ -7,6 +7,7 @@ from typing import Optional
 from core.exceptions import ParserExecutionError
 from core.schemas import ProductData
 from ..base.parser import BaseBrainParser
+from ..utils.cache import get_cached_url, set_cached_url
 
 from ...services.parsers import BrainProductParser
 
@@ -18,8 +19,27 @@ class SeleniumBrainParser(BaseBrainParser):
     PRODUCT_URL_PATTERN = re.compile(r"-p\d+\.html(?:$|\?)")
     HEADER_SEARCH_INPUT_XPATH = "/html/body/header/div[1]/div/div/div[2]/form/input[1]"
     HEADER_SEARCH_SUBMIT_XPATH = "/html/body/header/div[1]/div/div/div[2]/form/input[2]"
+    CACHE_KEY = "selenium"
     
     def _parse(self, *, query: Optional[str] = None, url: Optional[str] = None) -> ProductData:
+        if not query and url:
+            parser = BrainProductParser(url)
+            raw_payload = parser.parse()
+            if not raw_payload:
+                raise ParserExecutionError("No data returned from Selenium parser.")
+            product = ProductData.from_mapping(raw_payload)
+            product.source_url = url
+            return product
+
+        cached_url = get_cached_url(self.CACHE_KEY, query)
+        if cached_url:
+            parser = BrainProductParser(cached_url)
+            raw_payload = parser.parse()
+            if raw_payload:
+                product = ProductData.from_mapping(raw_payload)
+                product.source_url = cached_url
+                return product
+
         try:
             from selenium import webdriver
             from selenium.webdriver.chrome.service import Service
@@ -61,11 +81,9 @@ class SeleniumBrainParser(BaseBrainParser):
                     url=url,
                 )
 
-                driver.get(resolved_url)
-                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
+                set_cached_url(self.CACHE_KEY, query, resolved_url)
 
-                html = driver.page_source
-                parser = BrainProductParser(resolved_url, html=html)
+                parser = BrainProductParser(resolved_url)
                 raw_payload = parser.parse()
                 if not raw_payload:
                     raise ParserExecutionError("No data returned from Selenium parser.")
