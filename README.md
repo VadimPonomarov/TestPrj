@@ -88,6 +88,7 @@ Prerequisites:
 - PostgreSQL running locally (default: `127.0.0.1:5432`) or Docker DB on `127.0.0.1:5434`
 
 ```powershell
+# Repo page: https://github.com/VadimPonomarov/TestPrj/tree/master
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
 python deploy.local.py

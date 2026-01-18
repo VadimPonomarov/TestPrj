@@ -47,3 +47,8 @@ def set_cached_url(parser_name: str, query: Optional[str], url: Optional[str]) -
         _cache.move_to_end(key)
         while len(_cache) > _CACHE_CAPACITY:
             _cache.popitem(last=False)
+
+
+def clear_cache() -> None:
+    with _cache_lock:
+        _cache.clear()

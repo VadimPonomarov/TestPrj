@@ -21,8 +21,8 @@ wheels/
 *.egg
 
 # Environment variables (tracked for portability)
-.env*
 !.env.docker
+!.env.local
 
 # Virtual environment
 venv/
@@ -38,6 +38,7 @@ ENV/
 
 # Project specific
 media/
+static/
 staticfiles/
 *.sqlite3
 *.log
@@ -66,12 +67,6 @@ coverage.xml
 # Sphinx
 docs/_build/
 
-# PyCharm
-.idea/
-
-# VS Code
-.vscode/
-
 # OS
 .DS_Store
 Thumbs.db
@@ -81,12 +76,9 @@ temp/
 *.pyc
 *.pyo
 *.pyd
-.Python
 .venv/
 
 # Django
-*.log
-local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
@@ -96,15 +88,11 @@ logs/
 
 # Local development
 *.local
+!.env.local
 
 # Project specific
 *.bak
 *.backup
-*.swp
-*~
-
-# Poetry
-poetry.lock
 
 # VS Code
 .vscode/*
@@ -113,50 +101,14 @@ poetry.lock
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Database
-db.sqlite3
-
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Local development
-.env.local
-.env.*.local
-
 # Testing
-.pytest_cache/
 .mypy_cache/
 
 # Project specific
 mediafiles/
-staticfiles/
 
-# Local development
-.venv/
+!poetry.lock
 
-# Project specific
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Project specific
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Logs
-logs/
-*.log
-
-# Local development
-*.local
-
-# Project specific
-*.bak
-*.backup
-*.swp
-*~

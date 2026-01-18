@@ -3,10 +3,7 @@ from typing import Optional
 from core.exceptions import ParserExecutionError
 from core.schemas import ProductData
 from ..base.parser import BaseBrainParser
-
-# Import from the existing parsers package
-from ...services.parsers import BrainProductParser
-
+from ..utils.product import build_product_data
 
 class BeautifulSoupBrainParser(BaseBrainParser):
     """Adapter around the legacy BeautifulSoup parser."""
@@ -15,11 +12,4 @@ class BeautifulSoupBrainParser(BaseBrainParser):
         if not url:
             raise ParserExecutionError("'url' is required when using the BeautifulSoup parser.")
 
-        parser = BrainProductParser(url)
-        raw_payload = parser.parse()
-        if not raw_payload:
-            raise ParserExecutionError("No data returned from BeautifulSoup parser.")
-
-        product = ProductData.from_mapping(raw_payload)
-        product.source_url = url
-        return product
+        return build_product_data(url=url, parser_label="BeautifulSoup")
