@@ -79,40 +79,39 @@ pytest.ini             # Pytest configuration
 
 ## Cloning & local setup
 
-### Option A (recommended): local run without Docker (`deploy.local.py`)
+### Local Development Setup
 
 Prerequisites:
 
 - Python 3.12+
 - Poetry
-- PostgreSQL running locally (default: `127.0.0.1:5432`) or Docker DB on `127.0.0.1:5434`
 
 ```powershell
-# Repo page: https://github.com/VadimPonomarov/TestPrj/tree/master
 git clone https://github.com/VadimPonomarov/TestPrj.git
 Set-Location TestPrj
-python deploy.local.py
-```
 
-### Option B: manual local run
-
-```powershell
-# create/edit .env.local (local environment)
-# minimal required keys: DEBUG, SECRET_KEY, DJANGO_ALLOWED_HOSTS, SQL_*
+# Install dependencies
 poetry install
-poetry run python manage.py wait_db --timeout=60 --interval=1
+
+# Set up environment (copy .env.example to .env and configure as needed)
+Copy-Item .env.example .env
+
+# Run database migrations
 poetry run python manage.py migrate
-poetry run python manage.py collectstatic --noinput --clear
+
+# Create superuser (optional)
+poetry run python manage.py createsuperuser
+
+# Start development server
 poetry run python manage.py runserver 127.0.0.1:8000
 ```
-
-See **`DEPLOYMENT.md`** for a full local/no-Docker walkthrough (including using Docker DB with local Django).
 
 **Helpful commands**
 
 - `poetry run python manage.py createsuperuser`
-- `poetry run python manage.py collectstatic`
-- `poetry run python manage.py wait_db --timeout=60 --interval=1`
+- `poetry run python manage.py collectstatic --noinput`
+- `poetry run python manage.py migrate`
+- `poetry run python manage.py runserver`
 
 ## Running with Docker Compose
 
