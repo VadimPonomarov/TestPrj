@@ -130,8 +130,8 @@ Sometimes you only need the PostgreSQL service while keeping Scrapy spiders runn
    ```powershell
    docker compose up db -d
    ```
- 
-2. Ensure Scrapy is installed locally (it is optional and not bundled in the default Poetry dependencies). Follow `README/en/scrapy_project/README.md`.
+
+2. Ensure Scrapy dependencies are installed (Scrapy is included in Poetry dev dependencies). If you install without dev deps, re-run `poetry install --with dev`. Follow `README/en/scrapy_project/README.md`.
 
 3. Set temporary environment overrides (or rely on `.env.local`) so local Scrapy talks to the container:
    ```powershell

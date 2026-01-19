@@ -105,7 +105,7 @@ docker compose down -v                # зупинка контейнерів і
    docker compose up -d db
    ```
 
-2. Переконайтесь, що Scrapy встановлено локально (це опційна залежність і вона не входить у базові Poetry-залежності). Див. `README/uk/scrapy_project/README.md`.
+2. Переконайтесь, що залежності Scrapy встановлено (Scrapy входить у dev-залежності Poetry). Якщо ви інсталювали без dev-залежностей, виконайте `poetry install --with dev`. Див. `README/uk/scrapy_project/README.md`.
 
 3. Запустіть Scrapy локально (приклад для PowerShell):
 

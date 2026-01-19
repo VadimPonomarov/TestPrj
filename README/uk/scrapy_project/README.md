@@ -14,14 +14,12 @@
 
 ## Локальне середовище (розробка)
 
-Для локальної розробки з Scrapy додайте залежності, які не будуть впливати на основний проєкт:
+Для локальної розробки з Scrapy додайте залежності.
+
+Рекомендовано (перевірено): встановити dev-залежності (Scrapy знаходиться у групі `dev`):
 
 ```bash
-# Встановити Scrapy та додаткові бібліотеки локально (не в віртуальному оточенні проєкту)
-pip install scrapy scrapy-playwright scrapy-selenium
-
-# Або через Poetry (якщо потрібно ізолювати залежності)
-poetry add scrapy scrapy-playwright scrapy-selenium --group dev
+poetry install --with dev
 
 # Ініціалізувати Playwright (якщо потрібно)
 playwright install
@@ -147,11 +145,19 @@ API та Scrapy користуються однією моделлю `Product`, 
 1. Переконайтесь, що всі Python-залежності інстальовані (`poetry install`).
 2. Запустіть `poetry run pytest parser_app/tests -k scrape` — тести перевіряють
    логіку DRF-ендпоінтів, якою користується й Scrapy.
-3. Для ручного smoke-тесту:
-   - Запустіть `docker compose up db web` (або локальний `runserver`).
-   - Виконайте павука `scrapy crawl brain_bs4 ...`.
-   - Переконайтесь, що `/api/products/` повертає новий запис і що `export-csv`
-     віддає файл.
+3. Для ручного smoke-тесту (перевірено):
+   - Підніміть лише БД (Docker): `docker compose up -d db`
+   - Переконайтесь, що Django бачить БД: `poetry run python manage.py wait_db --timeout=30 --interval=1`
+   - Застосуйте міграції: `poetry run python manage.py migrate --noinput`
+   - Запустіть павука через Poetry:
+     ```powershell
+     Set-Location scrapy_project
+     poetry run scrapy crawl brain_bs4 -a "urls=https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
+     ```
+   - Перевірте, що дані збережені (приклад):
+     ```powershell
+     poetry run python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); import django; django.setup(); from parser_app.models import Product; print(Product.objects.count())"
+     ```
 
 > Для швидкої перевірки того, що нічого не зламалося (без зовнішніх HTTP-запитів),
 > використовуйте `scrapy list` та `scrapy check`.

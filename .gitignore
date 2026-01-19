@@ -108,5 +108,8 @@ logs/
 # Testing
 .mypy_cache/
 
+# Scrapy outputs
+scrapy_project/outputs/
+
 # Project specific
 mediafiles/

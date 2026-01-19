@@ -14,13 +14,12 @@ PostgreSQL database that the API uses.
 
 ## Local development setup
 
-If you want to run Scrapy spiders locally, install Scrapy-related dependencies:
+If you want to run Scrapy spiders locally, install Scrapy-related dependencies.
+
+Recommended (verified): install dev dependencies (Scrapy is in the `dev` group):
 
 ```bash
-pip install scrapy scrapy-playwright scrapy-selenium
-
-# or via Poetry (if you want to manage them as dev deps)
-poetry add scrapy scrapy-playwright scrapy-selenium --group dev
+poetry install --with dev
 
 # Playwright initialization (if needed)
 playwright install
@@ -115,10 +114,19 @@ Invoke-WebRequest -Uri "http://localhost:8000/api/products/export-csv/" -OutFile
 
 1. Ensure Python deps are installed: `poetry install`.
 2. Run `poetry run pytest parser_app/tests -k scrape`.
-3. For manual smoke test:
-   - Start `docker compose up db web` (or local `runserver`).
-   - Run a spider `scrapy crawl brain_bs4 ...`.
-   - Ensure `/api/products/` returns new data and `export-csv` streams a file.
+3. For manual smoke test (verified):
+   - Ensure DB is up (Docker): `docker compose up -d db`
+   - Ensure Django can connect: `poetry run python manage.py wait_db --timeout=30 --interval=1`
+   - Apply migrations: `poetry run python manage.py migrate --noinput`
+   - Run spider via Poetry:
+     ```powershell
+     Set-Location scrapy_project
+     poetry run scrapy crawl brain_bs4 -a "urls=https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
+     ```
+   - Verify data persisted (example):
+     ```powershell
+     poetry run python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); import django; django.setup(); from parser_app.models import Product; print(Product.objects.count())"
+     ```
 
 ## Common issues
 

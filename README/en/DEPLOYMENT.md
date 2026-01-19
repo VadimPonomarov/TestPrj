@@ -104,7 +104,7 @@ docker compose down -v
    docker compose up -d db
    ```
 
-2. Ensure Scrapy is installed locally (it is optional and not bundled in the default Poetry dependencies). Follow `README/en/scrapy_project/README.md`.
+2. Ensure Scrapy dependencies are installed (Scrapy is included in Poetry dev dependencies). If you install without dev deps, re-run `poetry install --with dev`. Follow `README/en/scrapy_project/README.md`.
 
 3. Run Scrapy locally:
 
