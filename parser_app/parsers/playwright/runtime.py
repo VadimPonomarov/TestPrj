@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import atexit
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import threading
 
 
@@ -25,10 +27,25 @@ def _start():
     if _playwright is not None and _browser is not None:
         return
 
-    from playwright.sync_api import sync_playwright
+    def _do_start():
+        from playwright.sync_api import sync_playwright
 
-    _playwright = sync_playwright().start()
-    _browser = _playwright.chromium.launch(headless=True)
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(headless=True)
+        return pw, browser
+
+    loop_running = False
+    try:
+        asyncio.get_running_loop()
+        loop_running = True
+    except RuntimeError:
+        loop_running = False
+
+    if loop_running:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            _playwright, _browser = executor.submit(_do_start).result()
+    else:
+        _playwright, _browser = _do_start()
 
 
 def get_browser():
