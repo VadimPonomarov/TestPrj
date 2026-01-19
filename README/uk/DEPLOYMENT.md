@@ -256,7 +256,7 @@ python deploy.local.py --db-host 127.0.0.1 --db-port 5432 --db-name mydb --db-us
 
 Основні змінні:
 
-- `LOG_ENABLED` (типово: `1`) — встановіть `0`, щоб вимкнути dictConfig-логування Django.
+- `LOG_ENABLED` (типово: `0`) — встановіть `1`, щоб увімкнути dictConfig-логування Django.
 - `LOG_LEVEL` (типово: `INFO`) — рівень логування для root.
 - `DJANGO_LOG_LEVEL` (типово: `INFO`) — рівень логування Django.
 - `SQL_LOG_LEVEL` (типово: `WARNING`) — логування SQL-запитів (`django.db.backends`).

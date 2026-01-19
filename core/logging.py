@@ -10,6 +10,11 @@ def configure_logger(name: str) -> logging.Logger:
     """Return a module-level logger configured for structured output."""
 
     logger = logging.getLogger(name)
+
+    if os.getenv("LOG_ENABLED", "0").strip().lower() not in {"1", "true", "yes", "on"}:
+        logger.disabled = True
+        return logger
+
     if logger.handlers:
         return logger
 

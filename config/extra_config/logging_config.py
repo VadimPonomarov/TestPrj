@@ -23,7 +23,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-LOG_ENABLED = _env_bool("LOG_ENABLED", True)
+LOG_ENABLED = _env_bool("LOG_ENABLED", False)
 
 if not LOG_ENABLED:
     LOGGING_CONFIG = None
