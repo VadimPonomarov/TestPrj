@@ -11,5 +11,5 @@ class BrainPlaywrightSpider(BrainParserSpider):
 
     custom_settings = {
         "DOWNLOAD_DELAY": float(os.getenv("SCRAPY_PLAYWRIGHT_DOWNLOAD_DELAY", "2.0")),
-        "CONCURRENT_REQUESTS": int(os.getenv("SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS", "1")),
+        "CONCURRENT_REQUESTS": int(os.getenv("SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS", "2")),
     }

@@ -24,12 +24,22 @@ def _env_bool(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
 _PLAYWRIGHT_POOL: ThreadPool | None = None
 _SELENIUM_POOL: ThreadPool | None = None
 
 
-def _get_single_thread_pool(name: str) -> ThreadPool:
-    pool = ThreadPool(minthreads=1, maxthreads=1, name=name)
+def _get_thread_pool(*, name: str, maxthreads: int) -> ThreadPool:
+    pool = ThreadPool(minthreads=1, maxthreads=max(1, int(maxthreads)), name=name)
     pool.start()
     return pool
 
@@ -37,7 +47,10 @@ def _get_single_thread_pool(name: str) -> ThreadPool:
 def _get_playwright_pool() -> ThreadPool:
     global _PLAYWRIGHT_POOL
     if _PLAYWRIGHT_POOL is None:
-        _PLAYWRIGHT_POOL = _get_single_thread_pool("playwright-parser")
+        # Playwright runtime uses a singleton browser with multiple contexts/pages.
+        # Allow Scrapy to schedule multiple concurrent parser jobs into that runtime.
+        maxthreads = _env_int("SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS", 2)
+        _PLAYWRIGHT_POOL = _get_thread_pool(name="playwright-parser", maxthreads=maxthreads)
         atexit.register(_PLAYWRIGHT_POOL.stop)
     return _PLAYWRIGHT_POOL
 
@@ -45,7 +58,8 @@ def _get_playwright_pool() -> ThreadPool:
 def _get_selenium_pool() -> ThreadPool:
     global _SELENIUM_POOL
     if _SELENIUM_POOL is None:
-        _SELENIUM_POOL = _get_single_thread_pool("selenium-parser")
+        # Selenium reuse mode must be serialized (single driver instance).
+        _SELENIUM_POOL = _get_thread_pool(name="selenium-parser", maxthreads=1)
         atexit.register(_SELENIUM_POOL.stop)
     return _SELENIUM_POOL
 
@@ -80,7 +94,7 @@ class BrainParserSpider(Spider):
 
     def parse_product(self, response: Response, target_url: str):
         if self.parser_type in {ParserType.SELENIUM, ParserType.PLAYWRIGHT}:
-            if self.parser_type == ParserType.PLAYWRIGHT and _env_bool("PLAYWRIGHT_REUSE_BROWSER"):
+            if self.parser_type == ParserType.PLAYWRIGHT:
                 deferred = deferToThreadPool(
                     reactor,
                     _get_playwright_pool(),

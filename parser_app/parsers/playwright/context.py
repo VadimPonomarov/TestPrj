@@ -6,29 +6,25 @@ from ..config import BROWSER_EXTRA_HEADERS, BROWSER_USER_AGENT
 
 
 def _block_resources_enabled() -> bool:
-    return os.getenv("PLAYWRIGHT_BLOCK_RESOURCES", "").strip() in {
-        "1",
-        "true",
-        "True",
-        "yes",
-        "YES",
-    }
+    raw = os.getenv("PLAYWRIGHT_BLOCK_RESOURCES", "").strip()
+    if raw == "":
+        return True
+    return raw in {"1", "true", "True", "yes", "YES"}
 
 
-def create_page(*, playwright=None, browser=None):
+async def create_page(*, browser=None):
     if browser is None:
-        if playwright is None:
-            raise ValueError("Either 'playwright' or 'browser' must be provided")
-        browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context(
+        raise ValueError("'browser' must be provided")
+
+    context = await browser.new_context(
         viewport={"width": 1920, "height": 1080},
         user_agent=BROWSER_USER_AGENT,
         extra_http_headers=dict(BROWSER_EXTRA_HEADERS),
     )
-    page = context.new_page()
+    page = await context.new_page()
 
     if _block_resources_enabled():
-        def _route_handler(route):
+        async def _route_handler(route):
             try:
                 resource_type = route.request.resource_type
             except Exception:
@@ -36,12 +32,19 @@ def create_page(*, playwright=None, browser=None):
 
             if resource_type in {"image", "media", "font"}:
                 try:
-                    route.abort()
+                    await route.abort()
                 except Exception:
-                    route.continue_()
+                    await route.continue_()
                 return
 
-            route.continue_()
+            if resource_type in {"stylesheet"}:
+                try:
+                    await route.abort()
+                except Exception:
+                    await route.continue_()
+                return
 
-        page.route("**/*", _route_handler)
+            await route.continue_()
+
+        await page.route("**/*", _route_handler)
     return browser, context, page

@@ -13,7 +13,7 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_yasg",
     # Project apps
-    "parser_app",
+    "parser_app.apps.ParserAppConfig",
 ]
 
 MIDDLEWARE = [

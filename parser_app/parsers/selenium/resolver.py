@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote_plus
+from urllib.parse import urljoin
 
 from core.exceptions import ParserExecutionError
 
@@ -89,6 +91,30 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
         wait = WebDriverWait(driver, SELENIUM_WAIT_TIMEOUT_SECONDS)
         stage = "open_home"
         try:
+            stage = "open_search"
+            try:
+                search_url = urljoin(HOME_URL, f"/ukr/search/?Search={quote_plus(query)}")
+                driver.get(search_url)
+                try:
+                    wait.until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "a[href*='-p'][href*='.html']")
+                        )
+                    )
+                except Exception:
+                    pass
+
+                try:
+                    first = driver.find_element(By.CSS_SELECTOR, "a[href*='-p'][href*='.html']")
+                    href = first.get_attribute("href")
+                    if href and PRODUCT_URL_PATTERN.search(href):
+                        return href
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            stage = "open_home"
             driver.get(HOME_URL)
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
 
