@@ -118,23 +118,23 @@ Set-Location TestPrj
 docker compose up --build
 ```
 
-| Сервіс | Порт | Призначення |
-| ------ | ---- | ----------- |
-| `db`   | 5434 | PostgreSQL 14 з healthcheck |
-| `web`  | 8000 | Django-додаток |
-| `nginx`| 80   | Проксі + статичні файли |
+| Сервіс  | Порт   | Призначення                      |
+| ------- | ------ | -------------------------------- |
+| `db`    | `5434` | PostgreSQL 14 з healthcheck       |
+| `web`   | `8000` | Django-додаток                    |
+| `nginx` | `80`   | Проксі + статичні/медіа файли     |
 
 При першому старті автоматично виконуються міграції та збір статиків. Зупинка зі знищенням томів: `docker compose down -v`.
 
 ## Налаштування середовища
 
-| Змінна | Опис | Значення за замовчуванням |
-| ------ | ---- | ------------------------ |
-| `DJANGO_SETTINGS_MODULE` | Модуль налаштувань | `config.settings` |
-| `SQL_*` / `POSTGRES_*` | Доступ до БД | див. `.env.docker` (Docker) або `.env.local` (локально) |
-| `SWAGGER_DEFAULT_API_URL` | Базовий URL у Swagger | `http://localhost` |
-| `IS_DOCKER` | Активація docker-режиму | `false` |
-| `TEMP_DIR` | Тимчасова папка для CSV | `temp/` |
+| Змінна                  | Опис                          | Значення за замовчуванням                                |
+| ----------------------- | ----------------------------- | -------------------------------------------------------- |
+| `DJANGO_SETTINGS_MODULE`| Модуль налаштувань            | `config.settings`                                        |
+| `SQL_*` / `POSTGRES_*`  | Доступ до БД                  | див. `.env.docker` (Docker) або `.env.local` (локально) |
+| `SWAGGER_DEFAULT_API_URL` | Базовий URL у Swagger       | `http://localhost`                                       |
+| `IS_DOCKER`             | Активація docker-режиму       | `false`                                                  |
+| `TEMP_DIR`              | Тимчасова папка для CSV       | `temp/`                                                  |
 
 Для Playwright потрібна установка браузерів (`playwright install --with-deps chromium`).
 
@@ -164,15 +164,15 @@ poetry run python manage.py createsuperuser
 
 Базовий шлях: `/api/`
 
-| Метод | Шлях | Призначення |
-| ----- | ---- | ----------- |
-| POST | `/products/` | Створення продукту вручну |
-| GET | `/products/` | Список з пошуком, фільтрами, пагінацією |
-| GET | `/products/<id>/` | Деталі продукту |
-| GET | `/products/export-csv/` | Експорт CSV (підтримує ті ж фільтри/ordering, що й список) |
-| POST | `/products/scrape/bs4/` | Запуск BS4 парсера |
-| POST | `/products/scrape/selenium/` | Запуск Selenium парсера |
-| POST | `/products/scrape/playwright/` | Запуск Playwright парсера |
+| Метод  | Шлях                        | Призначення                                                      |
+| ------ | --------------------------- | ---------------------------------------------------------------- |
+| `POST` | `/products/`                | Створення продукту вручну                                        |
+| `GET`  | `/products/`                | Список з пошуком, фільтрами, пагінацією                          |
+| `GET`  | `/products/<id>/`           | Деталі продукту                                                  |
+| `GET`  | `/products/export-csv/`     | Експорт CSV (підтримує ті ж фільтри/ordering, що й список)        |
+| `POST` | `/products/scrape/bs4/`     | Запуск BS4 парсера                                               |
+| `POST` | `/products/scrape/selenium/`| Запуск Selenium парсера                                          |
+| `POST` | `/products/scrape/playwright/` | Запуск Playwright парсера                                     |
 
 ### Приклад запиту на парсинг
 
@@ -233,12 +233,12 @@ poetry run pytest parser_app/tests/test_endpoints.py -k scrape
 
 ## Вирішення проблем
 
-| Симптом | Дія |
-| ------- | --- |
-| `OperationalError: could not connect to server` | Переконайтесь, що контейнер `db` запущений; збільште таймаут `wait_db`. |
-| Swagger показує неправильний домен | Встановіть `SWAGGER_DEFAULT_API_URL` або відкрийте через Nginx. |
-| Помилки Playwright про відсутність браузера | Виконайте `playwright install --with-deps chromium` всередині контейнера. |
-| 404 для статики за Nginx | Перезапустіть `collectstatic`, перевірте монтування `static_volume`. |
+| Симптом                                   | Дія                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `OperationalError: could not connect to server` | Переконайтесь, що контейнер `db` запущений; збільште таймаут `wait_db`.                  |
+| Swagger показує неправильний домен         | Встановіть `SWAGGER_DEFAULT_API_URL` або відкрийте через Nginx.                          |
+| Помилки Playwright про відсутність браузера| Виконайте `playwright install --with-deps chromium` всередині контейнера.                |
+| 404 для статики за Nginx                   | Перезапустіть `collectstatic`, перевірте монтування `static_volume`.                     |
 
 ---
 

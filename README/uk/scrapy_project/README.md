@@ -161,13 +161,13 @@ API та Scrapy користуються однією моделлю `Product`, 
 
 ## Поширені проблеми
 
-| Cимптом | Рішення |
-| ------- | ------- |
-| `ModuleNotFoundError: django` при `scrapy crawl` | Використайте `poetry run scrapy ...` або активуйте venv, де встановлено Django. |
-| Помилки Playwright / Selenium | Встановіть потрібні драйвери: `playwright install --with-deps chromium`, `pip install selenium` + chromedriver. |
-| Дані не зберігаються | Перевірте лог пайплайна (`Persisted product ...`). Якщо є помилки — вони з’являться у логах Scrapy/DRF. |
-| БД пуста після Scrapy | Перевірте, чи підключена та сама база що й у API (`DATABASE_URL`). |
-| Помилки при копіюванні команд у PowerShell | Використовуйте чисті рядки без `\`, або застосовуйте PowerShell-продовження `` ` ``. |
+| Симптом                                   | Рішення                                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `ModuleNotFoundError: django` при `scrapy crawl` | Використайте `poetry run scrapy ...` або активуйте venv, де встановлено Django.                           |
+| Помилки Playwright / Selenium             | Встановіть потрібні драйвери: `playwright install --with-deps chromium`, `pip install selenium` + chromedriver. |
+| Дані не зберігаються                      | Перевірте лог пайплайна (`Persisted product ...`). Якщо є помилки — вони з’являться у логах Scrapy/DRF.    |
+| БД пуста після Scrapy                     | Перевірте, чи підключена та сама база що й у API (`DATABASE_URL`).                                        |
+| Помилки при копіюванні команд у PowerShell| Використовуйте чисті рядки без `\`, або застосовуйте PowerShell-продовження `` ` ``.                     |
 
 ## Подальша робота
 

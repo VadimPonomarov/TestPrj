@@ -135,15 +135,15 @@ def print_step(index: int, message: str) -> None:
 
 
 def print_success(message: str) -> None:
-    print(f"{Colors.GREEN}✔ {message}{Colors.RESET}")
+    print(f"{Colors.GREEN}OK: {message}{Colors.RESET}")
 
 
 def print_warning(message: str) -> None:
-    print(f"{Colors.YELLOW}⚠ {message}{Colors.RESET}")
+    print(f"{Colors.YELLOW}WARN: {message}{Colors.RESET}")
 
 
 def print_error(message: str) -> None:
-    print(f"{Colors.RED}✖ {message}{Colors.RESET}")
+    print(f"{Colors.RED}ERROR: {message}{Colors.RESET}")
 
 
 def ensure_repo_root() -> None:
@@ -213,7 +213,7 @@ def wait_for_services(services: Iterable[str], timeout: int = 240) -> None:
 
 def wait_for_service(service: str, timeout: int) -> bool:
     start = time.time()
-    spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    spinner = "|/-\\"
     spin_index = 0
     while time.time() - start < timeout:
         container_id = subprocess.run(

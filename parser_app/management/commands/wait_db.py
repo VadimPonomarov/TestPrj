@@ -26,21 +26,21 @@ class Command(BaseCommand):
         timeout = options["timeout"]
         interval = options["interval"]
 
-        self.stdout.write("🗄️ Waiting for PostgreSQL database...")
+        self.stdout.write("Waiting for PostgreSQL database...")
 
         start_time = time.time()
         while True:
             elapsed = time.time() - start_time
             if elapsed >= timeout:
-                self.stdout.write(self.style.ERROR(f"❌ Database connection timeout after {timeout}s"))
+                self.stdout.write(self.style.ERROR(f"Database connection timeout after {timeout}s"))
                 raise SystemExit(1)
 
             try:
                 connection.ensure_connection()
                 elapsed_int = int(time.time() - start_time)
-                self.stdout.write(self.style.SUCCESS(f"✅ Database is available! (took {elapsed_int}s)"))
+                self.stdout.write(self.style.SUCCESS(f"Database is available! (took {elapsed_int}s)"))
                 return
             except OperationalError as e:
                 elapsed_int = int(elapsed)
-                self.stdout.write(f"⏳ Database unavailable ({elapsed_int}s/{timeout}s): {e}")
+                self.stdout.write(f"Database unavailable ({elapsed_int}s/{timeout}s): {e}")
                 time.sleep(interval)
