@@ -137,11 +137,17 @@ class PlaywrightBrainParser(BaseBrainParser):
                                 pass
 
                             content = page.content()
-                            return build_product_data(
-                                url=resolved_url,
-                                html=content,
-                                parser_label="Playwright",
-                            )
+                            try:
+                                return build_product_data(
+                                    url=resolved_url,
+                                    html=content,
+                                    parser_label="Playwright",
+                                )
+                            except ParserExecutionError:
+                                return build_product_data(
+                                    url=resolved_url,
+                                    parser_label="Playwright",
+                                )
 
                         finally:
                             try:
