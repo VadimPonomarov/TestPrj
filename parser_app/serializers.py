@@ -127,3 +127,45 @@ class ProductScrapeRequestSerializer(serializers.Serializer):
     def get_default_url(cls, parser_type=None):
         payload = cls.get_default_payload(parser_type)
         return payload.get("url")
+
+
+class ProductDeleteRequestSerializer(serializers.Serializer):
+    """Polymorphic payload supporting single, multiple, or full deletion."""
+
+    id = serializers.IntegerField(required=False, min_value=1)
+    ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=False,
+        help_text="List of product IDs to delete.",
+    )
+    delete_all = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        id_value = attrs.get("id")
+        ids_value = attrs.get("ids")
+        delete_all = attrs.get("delete_all", False)
+
+        selected_modes = sum(
+            1
+            for value in (
+                id_value,
+                ids_value,
+                True if delete_all else None,
+            )
+            if value not in (None, False)
+        )
+
+        if selected_modes == 0:
+            raise serializers.ValidationError(
+                "Provide either 'id', 'ids', or set 'delete_all' to true."
+            )
+        if selected_modes > 1:
+            raise serializers.ValidationError(
+                "Specify only one deletion mode: single id, list of ids, or delete_all."
+            )
+
+        if ids_value is not None:
+            attrs["ids"] = list(dict.fromkeys(ids_value))
+
+        return attrs

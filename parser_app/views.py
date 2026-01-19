@@ -5,6 +5,7 @@ from django.conf import settings
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import generics, status, filters, renderers
+from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.inspectors import SwaggerAutoSchema
@@ -21,7 +22,11 @@ from core.schemas import ProductData
 
 from .models import Product
 from .pagination import CustomPagination
-from .serializers import ProductSerializer, ProductScrapeRequestSerializer
+from .serializers import (
+    ProductDeleteRequestSerializer,
+    ProductSerializer,
+    ProductScrapeRequestSerializer,
+)
 from .services.factory import get_parser
 from .services.parsers import format_product_output
 
@@ -155,6 +160,58 @@ class ProductRetrieveView(generics.RetrieveAPIView):
     )
     def get(self, *args, **kwargs):  # type: ignore[override]
         return super().get(*args, **kwargs)
+
+
+class ProductDeleteView(APIView):
+    """
+    Endpoint for deleting products using polymorphic payload:
+    - single id
+    - list of ids
+    - delete_all flag
+    """
+
+    @swagger_auto_schema(
+        operation_summary="Delete products",
+        operation_description=(
+            "Удаление продуктов по одному ID, списку ID или полное удаление всех записей. "
+            "Тело запроса должно содержать либо 'id', либо 'ids', либо 'delete_all': true."
+        ),
+        request_body=ProductDeleteRequestSerializer,
+        tags=["Products"],
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "deleted": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    "mode": openapi.Schema(type=openapi.TYPE_STRING),
+                },
+            )
+        },
+    )
+    def delete(self, request, *args, **kwargs):
+        serializer = ProductDeleteRequestSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        if payload.get("delete_all"):
+            deleted, _ = Product.objects.all().delete()
+            mode = "all"
+        elif payload.get("ids") is not None:
+            ids = payload["ids"]
+            if not ids:
+                raise ValidationError({"ids": "List of ids must not be empty."})
+            deleted, _ = Product.objects.filter(id__in=ids).delete()
+            mode = "list"
+        else:
+            product_id = payload.get("id")
+            try:
+                Product.objects.get(id=product_id).delete()
+            except Product.DoesNotExist as exc:
+                raise ValidationError({"id": f"Product with id {product_id} does not exist."}) from exc
+            deleted = 1
+            mode = "single"
+
+        return Response({"deleted": deleted, "mode": mode}, status=status.HTTP_200_OK)
 
 
 class BaseProductScrapeView(generics.CreateAPIView):
