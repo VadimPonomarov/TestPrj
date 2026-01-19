@@ -79,7 +79,51 @@ pytest.ini             # Pytest configuration
 
 ## Cloning & local setup
 
-### Local Development Setup
+### Workstation prerequisites (one-time)
+
+1. **Install Python&nbsp;3.12**
+   - **Windows**: download the latest 3.12.x installer from [python.org](https://www.python.org/downloads/windows/) and enable _“Add python.exe to PATH”_. After the install completes, run `py --version` (or `python --version`) in PowerShell—it must report `3.12.x`.
+   - **macOS**: `brew install python@3.12` and then `python3.12 --version`.
+   - **Debian/Ubuntu**: `sudo apt update && sudo apt install -y python3.12 python3.12-venv` and verify with `python3.12 --version`.
+   - Keep the default `pip`/`venv` components—Poetry will rely on them.
+
+2. **Install Poetry**
+   - **Windows (PowerShell)**:
+     ```powershell
+     (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | py -
+     ```
+   - **macOS/Linux**:
+     ```bash
+     curl -sSL https://install.python-poetry.org | python3 -
+     ```
+   - Follow the installer’s final message to add Poetry to `PATH` (e.g., `C:\Users\<you>\AppData\Roaming\Python\Scripts` on Windows or `$HOME/.local/bin` on Unix). Confirm with `poetry --version`.
+
+3. **Install Git**
+   - Download from [git-scm.com](https://git-scm.com/downloads) (Windows/macOS) or `sudo apt install git` (Debian/Ubuntu). Verify via `git --version`.
+
+### Clone the repository
+
+```powershell
+git clone https://github.com/VadimPonomarov/TestPrj.git
+Set-Location TestPrj
+```
+
+### Quickstart (Docker via `deploy.py`)
+
+If you have Docker Desktop ≥ 24 with Compose V2, the fastest way to get a working stack is:
+
+```powershell
+python deploy.py
+```
+
+The helper script checks Docker/Compose availability, creates `.env.docker` and `.env.local` when missing, builds images, waits for PostgreSQL and Django to turn healthy, and prints follow-up commands. See [DEPLOYMENT.md](DEPLOYMENT.md) for advanced flags (`--db-only`, `--skip-build`, etc.).
+
+Once the script finishes:
+
+- API base: `http://localhost:8000/api/`
+- Swagger UI: `http://localhost:8000/api/doc/`
+
+### Local Development Setup (manual, no Docker)
 
 Prerequisites:
 
