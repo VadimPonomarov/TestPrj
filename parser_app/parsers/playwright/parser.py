@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
  
@@ -87,6 +88,13 @@ class PlaywrightBrainParser(BaseBrainParser):
             else:
                 def _run_sync_playwright() -> ProductData:
                     nonlocal resolved_url
+                    if sys.platform.startswith("win"):
+                        try:
+                            proactor_policy = getattr(asyncio, "WindowsProactorEventLoopPolicy", None)
+                            if proactor_policy is not None:
+                                asyncio.set_event_loop_policy(proactor_policy())
+                        except Exception:
+                            pass
                     from playwright.sync_api import sync_playwright
 
                     with sync_playwright() as p:
