@@ -12,7 +12,8 @@ def configure_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
 
     if os.getenv("LOG_ENABLED", "0").strip().lower() not in {"1", "true", "yes", "on"}:
-        logger.disabled = True
+        logger.setLevel(logging.ERROR)
+        logger.propagate = True
         return logger
 
     if logger.handlers:

@@ -26,8 +26,28 @@ def _env_int(name: str, default: int) -> int:
 LOG_ENABLED = _env_bool("LOG_ENABLED", False)
 
 if not LOG_ENABLED:
-    LOGGING_CONFIG = None
-    LOGGING = {}
+    LOGGING_CONFIG = "logging.config.dictConfig"
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "standard": {
+                "format": "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+            }
+        },
+        "handlers": {
+            "console_error": {
+                "class": "logging.StreamHandler",
+                "level": "ERROR",
+                "formatter": "standard",
+                "stream": "ext://sys.stderr",
+            }
+        },
+        "root": {
+            "level": "ERROR",
+            "handlers": ["console_error"],
+        },
+    }
 else:
     LOGGING_CONFIG = "logging.config.dictConfig"
 

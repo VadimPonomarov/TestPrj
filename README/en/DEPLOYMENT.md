@@ -240,7 +240,7 @@ Logging is configured via environment variables and implemented in `config/extra
 
 Common variables:
 
-- `LOG_ENABLED` (default: `0`) — set to `1` to enable Django dictConfig logging.
+- `LOG_ENABLED` (default: `0`) — error-only logging. Set to `1` to enable full Django dictConfig logging.
 - `LOG_LEVEL` (default: `INFO`) — root log level.
 - `DJANGO_LOG_LEVEL` (default: `INFO`) — Django logger level.
 - `SQL_LOG_LEVEL` (default: `WARNING`) — SQL query logging (`django.db.backends`).
