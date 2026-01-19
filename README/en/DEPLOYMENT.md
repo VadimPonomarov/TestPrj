@@ -104,7 +104,9 @@ docker compose down -v
    docker compose up -d db
    ```
 
-2. Run Scrapy locally:
+2. Ensure Scrapy is installed locally (it is optional and not bundled in the default Poetry dependencies). Follow `README/en/scrapy_project/README.md`.
+
+3. Run Scrapy locally:
 
    ```powershell
    Set-Location scrapy_project
@@ -121,6 +123,14 @@ docker compose down -v
 - `http://localhost:8000/api/products/` returns JSON (empty list on first run).
 - `http://localhost:8000/api/doc/` shows Swagger UI.
 - `docker compose ps` shows containers in `running` state.
+
+Concrete smoke checks used during verification:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/api/products/" | Select-Object StatusCode
+Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/api/doc/" | Select-Object StatusCode
+poetry run pytest -q
+```
 
 ---
 
@@ -215,6 +225,7 @@ Steps:
 | Symptom                                   | Fix                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `docker compose` cannot pull images        | Re-login to Docker Hub or check network connectivity.                                              |
+| `Bind for 0.0.0.0:5434 failed: port is already allocated` | Stop the process/container that uses `5434` (e.g., `docker ps` + `docker stop <name>`), or change the published port in `docker-compose.yml` and update `.env.local` accordingly. |
 | Unicode/encoding errors in Windows console | Run scripts in a UTF-8 console or set `PYTHONIOENCODING=utf-8` before executing Python scripts.   |
 | `psycopg` cannot connect                   | Ensure Docker DB is published on `5434` and local PostgreSQL is not occupying the port.            |
 | 404 for Django admin/login                 | Run `docker compose exec web python manage.py createsuperuser` to create a user.                  |

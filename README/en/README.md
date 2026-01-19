@@ -130,7 +130,10 @@ Sometimes you only need the PostgreSQL service while keeping Scrapy spiders runn
    ```powershell
    docker compose up db -d
    ```
-2. Set temporary environment overrides (or rely on `.env.local`) so local Scrapy talks to the container:
+ 
+2. Ensure Scrapy is installed locally (it is optional and not bundled in the default Poetry dependencies). Follow `README/en/scrapy_project/README.md`.
+
+3. Set temporary environment overrides (or rely on `.env.local`) so local Scrapy talks to the container:
    ```powershell
    $env:SQL_HOST = "127.0.0.1"
    $env:SQL_PORT = "5434"
@@ -139,7 +142,7 @@ Sometimes you only need the PostgreSQL service while keeping Scrapy spiders runn
    $env:SQL_PASSWORD = "mypassword"
    $env:DJANGO_SETTINGS_MODULE = "config.settings"
    ```
-3. Activate Poetry shell (or prefix with `poetry run`) and launch spiders from `scrapy_project`:
+4. Activate Poetry shell (or prefix with `poetry run`) and launch spiders from `scrapy_project`:
    ```powershell
    Set-Location scrapy_project
    poetry run scrapy crawl brain_bs4 -a "urls=https://brain.com.ua/..."

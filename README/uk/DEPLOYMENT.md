@@ -105,7 +105,9 @@ docker compose down -v                # зупинка контейнерів і
    docker compose up -d db
    ```
 
-2. Запустіть Scrapy локально (приклад для PowerShell):
+2. Переконайтесь, що Scrapy встановлено локально (це опційна залежність і вона не входить у базові Poetry-залежності). Див. `README/uk/scrapy_project/README.md`.
+
+3. Запустіть Scrapy локально (приклад для PowerShell):
 
    ```powershell
    Set-Location scrapy_project
@@ -123,6 +125,14 @@ docker compose down -v                # зупинка контейнерів і
 - `http://localhost:8000/api/doc/` показує Swagger UI.
 - `docker compose ps` показує всі контейнери у стані `running`.
 - Запуск Scrapy створює `scrapy_project/output.json` і вставляє рядок у базу.
+
+Конкретні smoke-перевірки, які використовувались під час валідації:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/api/products/" | Select-Object StatusCode
+Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:8000/api/doc/" | Select-Object StatusCode
+poetry run pytest -q
+```
 
 ---
 
@@ -231,6 +241,7 @@ python deploy.local.py --db-host 127.0.0.1 --db-port 5432 --db-name mydb --db-us
 | Симптом                              | Рішення                                                                                                       |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `docker compose` не може стягнути образи | Перелогіньтесь у Docker Hub або перевірте мережу.                                                             |
+| `Bind for 0.0.0.0:5434 failed: port is already allocated` | Зупиніть процес/контейнер, який займає `5434` (наприклад, `docker ps` + `docker stop <name>`), або змініть порт у `docker-compose.yml` і оновіть `.env.local`. |
 | `UnicodeDecodeError` під час локального Scrapy | Запускайте через виртуальне середовище репозиторію та переконайтеся, що `.env.local` присутній (кодування PG клієнта налаштоване). |
 | `psycopg` не підʼєднується            | Переконайтеся, що Docker-БД слухає порт `5434` і локальний Postgres не займає його.                           |
 | 404 для Django admin/login            | Виконайте `docker compose exec web python manage.py createsuperuser`, щоб створити користувача.              |
