@@ -440,7 +440,7 @@
                   "  pm.expect(text).to.include(pm.environment.get('manual_code_2'));",
                   "});",
                   "pm.test(\"csv is ordered by price asc (first row is 100.00)\", function () {",
-                  "  const lines = text.trim().split(/\r?\n/);",
+                  "  const lines = text.trim().split(/\\r?\\n/);",
                   "  pm.expect(lines.length).to.be.at.least(2);",
                   "  const header = lines[0].split(',');",
                   "  const idxPrice = header.indexOf('price');",
@@ -472,7 +472,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"url\": \"\"\n}"
             },
             "url": "{{base_url}}/products/scrape/bs4/"
           },
@@ -565,7 +565,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+              "raw": "{\n  \"query\": \"\"\n}"
             },
             "url": "{{base_url}}/products/scrape/selenium/"
           },
@@ -596,7 +596,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"url\": \"{{bs4_url}}\"\n}"
+              "raw": "{\n  \"query\": \"\"\n}"
             },
             "url": "{{base_url}}/products/scrape/playwright/"
           },

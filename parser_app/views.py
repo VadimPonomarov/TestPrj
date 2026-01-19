@@ -4,7 +4,7 @@ import os
 from django.conf import settings
 from django.http import FileResponse
 from django.utils import timezone
-from rest_framework import generics, status, filters
+from rest_framework import generics, status, filters, renderers
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg import openapi
 from drf_yasg.inspectors import SwaggerAutoSchema
@@ -349,10 +349,27 @@ class ProductScrapePlaywrightView(BaseProductScrapeView):
         return super().post(request, *args, **kwargs)
 
 
+class CsvRenderer(renderers.BaseRenderer):
+    media_type = "text/csv"
+    format = "csv"
+    charset = "utf-8"
+    render_style = "binary"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        if data is None:
+            return b""
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+        if isinstance(data, str):
+            return data.encode(self.charset)
+        return str(data).encode(self.charset)
+
+
 class ProductExportCsvView(generics.ListAPIView):
     """Export filtered products to CSV."""
     
     serializer_class = ProductSerializer
+    renderer_classes = [CsvRenderer, renderers.JSONRenderer, renderers.BrowsableAPIRenderer]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ProductFilter
     ordering_fields = ["name", "price", "created_at", "updated_at"]
@@ -411,4 +428,9 @@ class ProductExportCsvView(generics.ListAPIView):
         df.to_csv(temp_file_path, index=False)
 
         file_handle = open(temp_file_path, "rb")
-        return FileResponse(file_handle, as_attachment=True, filename=file_name)
+        return FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=file_name,
+            content_type="text/csv",
+        )
