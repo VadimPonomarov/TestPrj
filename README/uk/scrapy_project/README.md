@@ -159,6 +159,28 @@ API та Scrapy користуються однією моделлю `Product`, 
      poetry run python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); import django; django.setup(); from parser_app.models import Product; print(Product.objects.count())"
      ```
 
+## Налаштування швидкодії (збалансовані дефолти)
+
+Цей Scrapy-проєкт повторно використовує ті самі парсери, що й API.
+
+- `brain_bs4` повторно використовує `response.text` (без додаткового HTTP-запиту з парсера).
+- `brain_selenium` / `brain_playwright` виконують важкий парсинг у фонових потоках, щоб не блокувати Scrapy reactor.
+  Якщо увімкнено `SELENIUM_REUSE_DRIVER=1` або `PLAYWRIGHT_REUSE_BROWSER=1`, виконання парсерів серіалізується, щоб уникнути проблем потокобезпеки.
+
+Параметри для кожного павука (через env):
+
+- `SCRAPY_BS4_CONCURRENT_REQUESTS` / `SCRAPY_BS4_DOWNLOAD_DELAY`
+- `SCRAPY_SELENIUM_CONCURRENT_REQUESTS` / `SCRAPY_SELENIUM_DOWNLOAD_DELAY`
+- `SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS` / `SCRAPY_PLAYWRIGHT_DOWNLOAD_DELAY`
+
+Приклад (швидший bs4 павук):
+
+```powershell
+$env:SCRAPY_BS4_CONCURRENT_REQUESTS = "8"
+$env:SCRAPY_BS4_DOWNLOAD_DELAY = "0.2"
+scrapy crawl brain_bs4
+```
+
 > Для швидкої перевірки того, що нічого не зламалося (без зовнішніх HTTP-запитів),
 > використовуйте `scrapy list` та `scrapy check`.
 

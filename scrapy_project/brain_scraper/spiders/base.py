@@ -1,17 +1,53 @@
+import atexit
+import os
 from typing import Iterable
 
 import scrapy
 from scrapy import Spider
 from scrapy.http import Response
 from twisted.python.failure import Failure
+from twisted.internet import reactor
+from twisted.internet.threads import deferToThread, deferToThreadPool
+from twisted.python.threadpool import ThreadPool
 
 from core.enums import ParserType
 from core.exceptions import ParserExecutionError
 from core.schemas import ProductData
 from parser_app.services.factory import get_parser
+from parser_app.parsers.utils.product import build_product_data
 
 from ..items import ProductItem
 from ..utils import resolve_targets
+
+
+def _env_bool(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_PLAYWRIGHT_POOL: ThreadPool | None = None
+_SELENIUM_POOL: ThreadPool | None = None
+
+
+def _get_single_thread_pool(name: str) -> ThreadPool:
+    pool = ThreadPool(minthreads=1, maxthreads=1, name=name)
+    pool.start()
+    return pool
+
+
+def _get_playwright_pool() -> ThreadPool:
+    global _PLAYWRIGHT_POOL
+    if _PLAYWRIGHT_POOL is None:
+        _PLAYWRIGHT_POOL = _get_single_thread_pool("playwright-parser")
+        atexit.register(_PLAYWRIGHT_POOL.stop)
+    return _PLAYWRIGHT_POOL
+
+
+def _get_selenium_pool() -> ThreadPool:
+    global _SELENIUM_POOL
+    if _SELENIUM_POOL is None:
+        _SELENIUM_POOL = _get_single_thread_pool("selenium-parser")
+        atexit.register(_SELENIUM_POOL.stop)
+    return _SELENIUM_POOL
 
 
 class BrainParserSpider(Spider):
@@ -43,6 +79,39 @@ class BrainParserSpider(Spider):
         self.crawler.stats.inc_value("brain/product_failures")
 
     def parse_product(self, response: Response, target_url: str):
+        if self.parser_type in {ParserType.SELENIUM, ParserType.PLAYWRIGHT}:
+            if self.parser_type == ParserType.PLAYWRIGHT and _env_bool("PLAYWRIGHT_REUSE_BROWSER"):
+                deferred = deferToThreadPool(
+                    reactor,
+                    _get_playwright_pool(),
+                    self.run_parser,
+                    response=response,
+                    target_url=target_url,
+                )
+            elif self.parser_type == ParserType.SELENIUM and _env_bool("SELENIUM_REUSE_DRIVER"):
+                deferred = deferToThreadPool(
+                    reactor,
+                    _get_selenium_pool(),
+                    self.run_parser,
+                    response=response,
+                    target_url=target_url,
+                )
+            else:
+                deferred = deferToThread(self.run_parser, response=response, target_url=target_url)
+
+            def _on_success(product: ProductData):
+                self.crawler.stats.inc_value("brain/products_parsed")
+                return ProductItem.from_product_data(product)
+
+            def _on_error(failure: Failure):
+                self.logger.error("Parser error for %s: %s", target_url, failure)
+                self.crawler.stats.inc_value("brain/parser_errors")
+                return None
+
+            deferred.addCallback(_on_success)
+            deferred.addErrback(_on_error)
+            return deferred
+
         try:
             product = self.run_parser(response=response, target_url=target_url)
         except ParserExecutionError as exc:
@@ -55,5 +124,9 @@ class BrainParserSpider(Spider):
 
     # -- Parser integration -------------------------------------------
     def run_parser(self, response: scrapy.http.Response, target_url: str) -> ProductData:
+        if self.parser_type == ParserType.BS4:
+            html = getattr(response, "text", None)
+            if html:
+                return build_product_data(url=target_url, html=html, parser_label="BeautifulSoup")
         parser = get_parser(self.parser_type)
         return parser.parse(query=self.target_query, url=target_url)

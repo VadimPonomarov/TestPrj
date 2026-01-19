@@ -128,6 +128,28 @@ Invoke-WebRequest -Uri "http://localhost:8000/api/products/export-csv/" -OutFile
      poetry run python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); import django; django.setup(); from parser_app.models import Product; print(Product.objects.count())"
      ```
 
+## Performance tuning (balanced defaults)
+
+This Scrapy project reuses the same parsers as the API.
+
+- `brain_bs4` reuses `response.text` (no extra HTTP request from the parser).
+- `brain_selenium` / `brain_playwright` run heavy parsing in background threads so the Scrapy reactor is not blocked.
+  If `SELENIUM_REUSE_DRIVER=1` or `PLAYWRIGHT_REUSE_BROWSER=1` is enabled, parser execution is serialized to avoid thread-safety issues.
+
+Per-spider knobs (via env):
+
+- `SCRAPY_BS4_CONCURRENT_REQUESTS` / `SCRAPY_BS4_DOWNLOAD_DELAY`
+- `SCRAPY_SELENIUM_CONCURRENT_REQUESTS` / `SCRAPY_SELENIUM_DOWNLOAD_DELAY`
+- `SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS` / `SCRAPY_PLAYWRIGHT_DOWNLOAD_DELAY`
+
+Example (faster bs4 spider):
+
+```powershell
+$env:SCRAPY_BS4_CONCURRENT_REQUESTS = "8"
+$env:SCRAPY_BS4_DOWNLOAD_DELAY = "0.2"
+scrapy crawl brain_bs4
+```
+
 ## Common issues
 
 | Symptom                                      | Fix                                                                                                   |

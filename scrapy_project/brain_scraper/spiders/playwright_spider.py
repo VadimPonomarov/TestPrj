@@ -1,3 +1,5 @@
+import os
+
 from core.enums import ParserType
 
 from .base import BrainParserSpider
@@ -8,6 +10,6 @@ class BrainPlaywrightSpider(BrainParserSpider):
     parser_type = ParserType.PLAYWRIGHT
 
     custom_settings = {
-        "DOWNLOAD_DELAY": 2.0,
-        "CONCURRENT_REQUESTS": 1,
+        "DOWNLOAD_DELAY": float(os.getenv("SCRAPY_PLAYWRIGHT_DOWNLOAD_DELAY", "2.0")),
+        "CONCURRENT_REQUESTS": int(os.getenv("SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS", "1")),
     }
