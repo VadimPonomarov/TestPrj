@@ -35,6 +35,7 @@ docker compose version    # Compose V2
 > Notes:
 > - Docker uses `.env.docker`.
 > - Local (non-Docker) uses `.env.local`.
+> - Logging is configurable via `LOG_*` variables (see below).
 > - All paths and commands below assume you are in the repository root.
 
 ---
@@ -230,3 +231,36 @@ Steps:
 | `psycopg` cannot connect                   | Ensure Docker DB is published on `5434` and local PostgreSQL is not occupying the port.            |
 | 404 for Django admin/login                 | Run `docker compose exec web python manage.py createsuperuser` to create a user.                  |
 | Need to reset the DB                       | `docker compose down -v && docker compose up -d --build`.                                          |
+
+---
+
+## 8. Logging configuration (via `.env*`)
+
+Logging is configured via environment variables and implemented in `config/extra_config/logging_config.py`.
+
+Common variables:
+
+- `LOG_ENABLED` (default: `1`) — set to `0` to disable Django dictConfig logging.
+- `LOG_LEVEL` (default: `INFO`) — root log level.
+- `DJANGO_LOG_LEVEL` (default: `INFO`) — Django logger level.
+- `SQL_LOG_LEVEL` (default: `WARNING`) — SQL query logging (`django.db.backends`).
+- `LOG_CONSOLE_ENABLED` (default: `1`) — enable console handler.
+- `LOG_FILE_ENABLED` (default: `0`) — enable rotating file handler.
+- `LOG_DIR` / `LOG_FILE_NAME` / `LOG_FILE_PATH` — file output path.
+- `LOG_MAX_BYTES` / `LOG_BACKUP_COUNT` — rotation parameters.
+
+Examples:
+
+Enable file logging locally:
+
+```env
+LOG_FILE_ENABLED=1
+LOG_DIR=logs
+LOG_FILE_NAME=app.log
+```
+
+Disable logging entirely:
+
+```env
+LOG_ENABLED=0
+```

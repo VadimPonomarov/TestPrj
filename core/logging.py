@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from typing import Final
 
@@ -12,11 +13,17 @@ def configure_logger(name: str) -> logging.Logger:
     if logger.handlers:
         return logger
 
+    root_logger = logging.getLogger()
+    if root_logger.handlers:
+        return logger
+
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+
     handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(logging.INFO)
+    handler.setLevel(log_level)
     handler.setFormatter(logging.Formatter(_LOG_FORMAT))
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(log_level)
     logger.addHandler(handler)
     logger.propagate = False
 

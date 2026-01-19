@@ -20,6 +20,7 @@ from .cors_config import (  # noqa: F401
     CORS_ALLOW_HEADERS,
     CSRF_TRUSTED_ORIGINS,
 )
+from .logging_config import LOGGING, LOGGING_CONFIG  # noqa: F401
 
 __all__ = [
     "BASE_DIR",
@@ -47,4 +48,6 @@ __all__ = [
     "CORS_ALLOW_CREDENTIALS",
     "CORS_ALLOW_HEADERS",
     "CSRF_TRUSTED_ORIGINS",
+    "LOGGING",
+    "LOGGING_CONFIG",
 ]

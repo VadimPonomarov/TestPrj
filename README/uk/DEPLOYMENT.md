@@ -35,6 +35,7 @@ docker compose version    # Compose V2
 > Нотатки:
 > - Для Docker використовується `.env.docker`.
 > - Для локального запуску використовується `.env.local`.
+> - Логування налаштовується через змінні `LOG_*` (див. нижче).
 > - Усі шляхи й команди нижче припускають, що ви перебуваєте у корені свіжого клону.
 
 ---
@@ -246,6 +247,39 @@ python deploy.local.py --db-host 127.0.0.1 --db-port 5432 --db-name mydb --db-us
 | `psycopg` не підʼєднується            | Переконайтеся, що Docker-БД слухає порт `5434` і локальний Postgres не займає його.                           |
 | 404 для Django admin/login            | Виконайте `docker compose exec web python manage.py createsuperuser`, щоб створити користувача.              |
 | Потрібно скинути базу                 | `docker compose down -v && docker compose up -d --build`.                                                     |
+
+---
+
+## 8. Налаштування логування (через `.env*`)
+
+Логування налаштовується через змінні оточення і реалізовано у `config/extra_config/logging_config.py`.
+
+Основні змінні:
+
+- `LOG_ENABLED` (типово: `1`) — встановіть `0`, щоб вимкнути dictConfig-логування Django.
+- `LOG_LEVEL` (типово: `INFO`) — рівень логування для root.
+- `DJANGO_LOG_LEVEL` (типово: `INFO`) — рівень логування Django.
+- `SQL_LOG_LEVEL` (типово: `WARNING`) — логування SQL-запитів (`django.db.backends`).
+- `LOG_CONSOLE_ENABLED` (типово: `1`) — логування у консоль.
+- `LOG_FILE_ENABLED` (типово: `0`) — логування у файл (з ротацією).
+- `LOG_DIR` / `LOG_FILE_NAME` / `LOG_FILE_PATH` — шлях до лог-файлу.
+- `LOG_MAX_BYTES` / `LOG_BACKUP_COUNT` — параметри ротації.
+
+Приклади:
+
+Увімкнути логування у файл локально:
+
+```env
+LOG_FILE_ENABLED=1
+LOG_DIR=logs
+LOG_FILE_NAME=app.log
+```
+
+Повністю вимкнути логування:
+
+```env
+LOG_ENABLED=0
+```
 
 Для додаткового контексту (парсери, використання API, інструкції Scrapy) зверніться до `README.md`
 та `scrapy_project/README.md`.

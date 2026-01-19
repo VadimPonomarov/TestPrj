@@ -30,6 +30,12 @@ TEMPLATES = _extra_config.TEMPLATES
 WSGI_APPLICATION = _extra_config.WSGI_APPLICATION
 
 
+# Logging
+
+LOGGING = getattr(_extra_config, "LOGGING", {})
+LOGGING_CONFIG = getattr(_extra_config, "LOGGING_CONFIG", "logging.config.dictConfig")
+
+
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
