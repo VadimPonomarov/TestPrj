@@ -11,10 +11,17 @@ from ..utils.overlays import PLAYWRIGHT_OVERLAY_SELECTORS
 from .config import PLAYWRIGHT_NAVIGATION_TIMEOUT_MS, PLAYWRIGHT_PRELOADER_TIMEOUT_MS
 
 
+SEARCH_FIRST_PRODUCT_LINK_XPATH = "//a[contains(@href,'-p') and contains(@href,'.html') and normalize-space(string(.))!=''][1]"
+HEADER_SEARCH_INPUT_XPATH = "/html/body/header/div[1]/div/div/div[2]/form/input[1]"
+HEADER_SEARCH_INPUT_XPATH_FALLBACK = "/html/body/header/div[2]/div/div/div[2]/form/input[1]"
+HEADER_SEARCH_SUBMIT_XPATH = "/html/body/header/div[1]/div/div/div[2]/form/input[2]"
+HEADER_SEARCH_SUBMIT_XPATH_FALLBACK = "/html/body/header/div[2]/div/div/div[2]/form/input[2]"
+
+
 async def dismiss_overlays(*, page) -> None:
     for selector in PLAYWRIGHT_OVERLAY_SELECTORS:
         try:
-            loc = page.locator(selector)
+            loc = page.locator(f"xpath={selector}")
             if await loc.count() < 1:
                 continue
             await loc.first.click(timeout=1200, force=True)
@@ -36,28 +43,17 @@ async def resolve_product_url(*, page, query: str) -> str:
             timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS,
         )
 
-        # Fastest extraction path: let the browser pick the first matching anchor.
-        try:
-            href = await page.eval_on_selector(
-                "a[href*='-p'][href*='.html']",
-                "el => el && el.getAttribute('href')",
-            )
-            if href and PRODUCT_URL_PATTERN.search(str(href)):
-                return urljoin(HOME_URL, str(href))
-        except Exception:
-            pass
-
-        anchors = page.locator("a[href*='-p'][href*='.html']")
+        anchors = page.locator(f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}")
         try:
             await anchors.first.wait_for(state="attached", timeout=20000)
         except Exception:
             pass
-
-        count = await anchors.count()
-        for idx in range(min(count, 10)):
-            href = await anchors.nth(idx).get_attribute("href")
+        try:
+            href = await anchors.first.get_attribute("href")
             if href and PRODUCT_URL_PATTERN.search(href):
                 return urljoin(HOME_URL, href)
+        except Exception:
+            pass
 
         # Last resort: tiny HTML scan (kept small by limiting to a short window).
         try:
@@ -76,7 +72,7 @@ async def resolve_product_url(*, page, query: str) -> str:
     await page.wait_for_load_state("domcontentloaded", timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS)
 
     try:
-        await page.locator("#page-preloader").wait_for(
+        await page.locator("xpath=//*[@id='page-preloader']").wait_for(
             state="hidden", timeout=PLAYWRIGHT_PRELOADER_TIMEOUT_MS
         )
     except Exception:
@@ -84,11 +80,11 @@ async def resolve_product_url(*, page, query: str) -> str:
 
     await dismiss_overlays(page=page)
 
-    header_input = page.locator("xpath=/html/body/header/div[1]/div/div/div[2]/form/input[1]")
+    header_input = page.locator(f"xpath={HEADER_SEARCH_INPUT_XPATH}")
     try:
         await header_input.wait_for(state="visible", timeout=8000)
     except Exception:
-        header_input = page.locator(".quick-search-input:visible").first
+        header_input = page.locator(f"xpath={HEADER_SEARCH_INPUT_XPATH_FALLBACK}")
         await header_input.wait_for(state="attached", timeout=20000)
 
     try:
@@ -102,41 +98,44 @@ async def resolve_product_url(*, page, query: str) -> str:
         await dismiss_overlays(page=page)
         await header_input.click(timeout=20000, force=True)
 
-    search_input = page.locator(".qsr-input:visible").first
-    try:
-        await search_input.wait_for(state="visible", timeout=5000)
-    except Exception:
-        search_input = header_input
+    search_input = header_input
 
     try:
         await search_input.fill(query, timeout=20000)
     except Exception:
-        await page.evaluate(
-            "(sel, value) => {"
-            "  const el = document.querySelector(sel);"
-            "  if (!el) return;"
-            "  el.value = value;"
-            "  el.dispatchEvent(new Event('input', { bubbles: true }));"
-            "  el.dispatchEvent(new Event('change', { bubbles: true }));"
-            "}",
-            ".quick-search-input",
-            query,
-        )
+        try:
+            await page.evaluate(
+                "(xpath, value) => {"
+                "  const r = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);"
+                "  const el = r.singleNodeValue;"
+                "  if (!el) return;"
+                "  el.value = value;"
+                "  el.dispatchEvent(new Event('input', { bubbles: true }));"
+                "  el.dispatchEvent(new Event('change', { bubbles: true }));"
+                "}",
+                HEADER_SEARCH_INPUT_XPATH,
+                query,
+            )
+        except Exception:
+            pass
 
     submitted = False
-    for selector in (
-        ".qsr-submit:visible",
-        ".search-button-first-form:visible",
-        "form input[type='submit']:visible",
-    ):
+    try:
+        btn = page.locator(f"xpath={HEADER_SEARCH_SUBMIT_XPATH}")
+        await btn.wait_for(state="attached", timeout=5000)
+        await btn.click(timeout=20000)
+        submitted = True
+    except Exception:
+        submitted = False
+
+    if not submitted:
         try:
-            btn = page.locator(selector).first
-            await btn.wait_for(state="visible", timeout=5000)
+            btn = page.locator(f"xpath={HEADER_SEARCH_SUBMIT_XPATH_FALLBACK}")
+            await btn.wait_for(state="attached", timeout=5000)
             await btn.click(timeout=20000)
             submitted = True
-            break
         except Exception:
-            continue
+            submitted = False
 
     if not submitted:
         try:
@@ -150,57 +149,37 @@ async def resolve_product_url(*, page, query: str) -> str:
         pass
 
     try:
-        await page.wait_for_selector(
-            ".qsr-products-list a[href*='-p'][href*='.html'], .qsr-showall",
-            timeout=20000,
+        await page.wait_for_function(
+            "() => window.location && window.location.href && window.location.href.includes('/search/')"
         )
     except Exception:
         pass
 
     try:
-        show_all = page.locator(".qsr-showall").first
-        if await show_all.count() > 0:
-            await show_all.click(timeout=20000)
-            try:
-                await page.wait_for_load_state("domcontentloaded", timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    for selector in (
-        ".qsr-products-list a[href*='-p'][href*='.html']",
-        ".qsr-products a[href*='-p'][href*='.html']",
-        "a[href*='-p'][href*='.html']",
-    ):
-        try:
-            first = page.locator(selector).first
-            await first.wait_for(state="visible", timeout=20000)
-            await first.click(timeout=20000)
-            try:
-                await page.wait_for_load_state("domcontentloaded", timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS)
-            except Exception:
-                pass
+        first = page.locator(f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}")
+        await first.first.wait_for(state="attached", timeout=20000)
+        href = await first.first.get_attribute("href")
+        if href and PRODUCT_URL_PATTERN.search(href):
+            resolved = urljoin(HOME_URL, href)
+            await page.goto(resolved, wait_until="domcontentloaded", timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS)
+            await page.wait_for_load_state("domcontentloaded", timeout=PLAYWRIGHT_NAVIGATION_TIMEOUT_MS)
             current_url = page.url
             if current_url and PRODUCT_URL_PATTERN.search(current_url):
                 return current_url
-        except Exception:
-            continue
+            return resolved
+    except Exception:
+        pass
 
     current_url = page.url
     if current_url and PRODUCT_URL_PATTERN.search(current_url):
         return current_url
 
-    anchors = page.locator("a[href*='-p'][href*='.html']")
-    count = await anchors.count()
-    for idx in range(min(count, 30)):
-        href = await anchors.nth(idx).get_attribute("href")
-        if href and PRODUCT_URL_PATTERN.search(href):
-            return urljoin(HOME_URL, href)
-
-    html = (await page.content()) or ""
-    match = re.search(r"href=[\"']([^\"']*-p\d+\.html[^\"']*)[\"']", html)
-    if match:
-        return urljoin(HOME_URL, match.group(1))
+    try:
+        html = (await page.content()) or ""
+        match = re.search(r"href=[\"']([^\"']*-p\d+\.html[^\"']*)[\"']", html)
+        if match:
+            return urljoin(HOME_URL, match.group(1))
+    except Exception:
+        pass
 
     raise ParserExecutionError("Unable to resolve product URL from search results.")

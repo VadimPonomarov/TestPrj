@@ -2,6 +2,7 @@ import json
 import os
 
 from django.conf import settings
+from django.db import IntegrityError
 from django.http import FileResponse
 from django.utils import timezone
 from rest_framework import generics, status, filters, renderers
@@ -143,7 +144,14 @@ class ProductListCreateView(generics.ListCreateAPIView):
                 return Response(exc.detail, status=status.HTTP_200_OK)
             raise
 
-        self.perform_create(serializer)
+        try:
+            self.perform_create(serializer)
+        except IntegrityError:
+            return Response(
+                {"detail": "Product with the same product_code or source_url already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 

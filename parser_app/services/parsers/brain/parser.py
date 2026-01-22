@@ -3,6 +3,9 @@ from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple
 
 from bs4 import BeautifulSoup
+from lxml import etree
+
+from parser_app.common.constants import PRODUCT_CODE_XPATH
 
 from .extractors.characteristics import extract_characteristics, extract_display_info
 from .extractors.jsonld import (
@@ -50,9 +53,11 @@ class BrainProductParser:
         metadata = build_metadata(product_json, offers)
         color, storage = self._guess_color_and_storage(characteristics, product_json)
 
+        dom_product_code = self._extract_first_text_by_xpath(html, PRODUCT_CODE_XPATH)
+
         data: Dict[str, Any] = {
             "name": product_json.get("name"),
-            "product_code": product_json.get("mpn") or metadata.get("sku"),
+            "product_code": dom_product_code or product_json.get("mpn") or metadata.get("sku"),
             "source_url": self.url,
             "price": self._to_decimal(offers.get("price")),
             "sale_price": self._to_decimal(offers.get("sale_price")),
@@ -68,6 +73,35 @@ class BrainProductParser:
         }
 
         return {k: v for k, v in data.items() if v not in (None, "")}
+
+    @staticmethod
+    def _extract_first_text_by_xpath(html: str, xpath: str) -> Optional[str]:
+        if not html:
+            return None
+        try:
+            tree = etree.HTML(html)
+        except Exception:
+            return None
+        if tree is None:
+            return None
+        try:
+            nodes = tree.xpath(xpath)
+        except Exception:
+            return None
+        if not nodes:
+            return None
+
+        node = nodes[0]
+        try:
+            if isinstance(node, str):
+                value = node
+            else:
+                value = " ".join(node.itertext())
+        except Exception:
+            return None
+
+        value = " ".join((value or "").split())
+        return value or None
 
     @staticmethod
     def _guess_color_and_storage(

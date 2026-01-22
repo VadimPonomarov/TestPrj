@@ -3,6 +3,13 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup
+from lxml import etree
+
+from parser_app.common.constants import (
+    CHARACTERISTICS_KEY_REL_XPATH,
+    CHARACTERISTICS_ROWS_XPATH,
+    CHARACTERISTICS_VALUE_REL_XPATH,
+)
 
 
 def extract_characteristics(soup: Optional[BeautifulSoup]) -> Dict[str, Any]:
@@ -24,49 +31,68 @@ def extract_characteristics(soup: Optional[BeautifulSoup]) -> Dict[str, Any]:
 
 def _extract_characteristics_from_dom(soup: BeautifulSoup) -> Dict[str, Any]:
     characteristics: Dict[str, Any] = {}
-    selectors: List[Tuple[str, str, str]] = [
-        (
-            "div.product-characteristic__item",
-            "div.product-characteristic__title",
-            "div.product-characteristic__value",
-        ),
-        (
-            "div.product-properties__item",
-            "div.product-properties__title",
-            "div.product-properties__value",
-        ),
-        (
-            "li.characteristics__list-item",
-            "span.characteristics__name",
-            "span.characteristics__value",
-        ),
-    ]
 
-    for container_selector, key_selector, value_selector in selectors:
-        containers = soup.select(container_selector)
-        if not containers:
+    html = str(soup)
+    tree = etree.HTML(html) if html else None
+    if tree is None:
+        return {}
+
+    def _norm(text: str) -> str:
+        return " ".join((text or "").split())
+
+    try:
+        rows = tree.xpath(CHARACTERISTICS_ROWS_XPATH)
+    except Exception:
+        rows = []
+
+    for row in rows:
+        try:
+            key_nodes = row.xpath(CHARACTERISTICS_KEY_REL_XPATH)
+            value_nodes = row.xpath(CHARACTERISTICS_VALUE_REL_XPATH)
+        except Exception:
             continue
 
-        for container in containers:
-            key_node = container.select_one(key_selector)
-            value_node = container.select_one(value_selector)
-            key = key_node.get_text(" ", strip=True) if key_node else None
-            value = value_node.get_text(" ", strip=True) if value_node else None
-            if key and value:
-                characteristics[key] = value
+        key = None
+        if key_nodes:
+            try:
+                key = _norm(" ".join(key_nodes[0].itertext()))
+            except Exception:
+                key = None
 
-        if characteristics:
-            return characteristics
+        value = None
+        if value_nodes:
+            try:
+                value = _norm(" ".join(value_nodes[0].itertext()))
+            except Exception:
+                value = None
 
-    table = soup.select_one("table.characteristics, table.product-characteristics")
-    if table:
-        for row in table.select("tr"):
-            cells = row.find_all(["td", "th"])
-            if len(cells) >= 2:
-                key = cells[0].get_text(" ", strip=True)
-                value = cells[1].get_text(" ", strip=True)
-                if key and value:
-                    characteristics[key] = value
+        if key and value:
+            characteristics[key] = value
+
+    if characteristics:
+        return characteristics
+
+    try:
+        table_rows = tree.xpath(
+            "//table[contains(@class,'characteristics') or contains(@class,'product-characteristics')]//tr"
+        )
+    except Exception:
+        table_rows = []
+
+    for row in table_rows:
+        try:
+            cells = row.xpath("./th|./td")
+        except Exception:
+            continue
+        if len(cells) < 2:
+            continue
+        try:
+            key = _norm(" ".join(cells[0].itertext()))
+            value = _norm(" ".join(cells[1].itertext()))
+        except Exception:
+            continue
+        if key and value:
+            characteristics[key] = value
 
     return characteristics
 

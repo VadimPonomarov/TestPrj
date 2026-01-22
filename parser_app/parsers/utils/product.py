@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from core.exceptions import ParserExecutionError
 from core.schemas import ProductData
@@ -16,4 +16,8 @@ def build_product_data(*, url: str, parser_label: str, html: Optional[str] = Non
 
     product = ProductData.from_mapping(raw_payload)
     product.source_url = url
+    existing_metadata: Dict[str, Any] = dict(product.metadata or {})
+    existing_metadata.setdefault("parser", parser_label)
+    existing_metadata.setdefault("html_provided", html is not None)
+    product.metadata = existing_metadata
     return product

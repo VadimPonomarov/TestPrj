@@ -74,7 +74,7 @@ class SeleniumBrainParser(BaseBrainParser):
 
                     driver.get(resolved_url)
                     WebDriverWait(driver, 15).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+                        EC.presence_of_element_located((By.XPATH, "//body"))
                     )
                 except Exception:
                     try:

@@ -17,6 +17,11 @@ from .config import (
 )
 
 
+SEARCH_FIRST_PRODUCT_LINK_XPATH = "//a[contains(@href,'-p') and contains(@href,'.html') and normalize-space(string(.))!=''][1]"
+HEADER_SEARCH_INPUT_XPATH_FALLBACK = "/html/body/header/div[2]/div/div/div[2]/form/input[1]"
+HEADER_SEARCH_SUBMIT_XPATH_FALLBACK = "/html/body/header/div[2]/div/div/div[2]/form/input[2]"
+
+
 def _dump_debug_html(*, driver, logger, label: str) -> None:
     try:
         base_dir = os.path.join(os.getcwd(), "temp")
@@ -31,9 +36,9 @@ def _dump_debug_html(*, driver, logger, label: str) -> None:
         return
 
 
-def _first_visible_by_css(*, driver, By, selector: str):
+def _first_visible_by_xpath(*, driver, By, xpath: str):
     try:
-        elements = driver.find_elements(By.CSS_SELECTOR, selector)
+        elements = driver.find_elements(By.XPATH, xpath)
     except Exception:
         return None
     for el in elements:
@@ -62,7 +67,7 @@ def _safe_click(*, driver, element) -> bool:
 def _dismiss_overlays(*, driver, By) -> None:
     for selector in SELENIUM_OVERLAY_SELECTORS:
         try:
-            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            elements = driver.find_elements(By.XPATH, selector)
             if not elements:
                 continue
             el = elements[0]
@@ -96,16 +101,12 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
                 search_url = urljoin(HOME_URL, f"/ukr/search/?Search={quote_plus(query)}")
                 driver.get(search_url)
                 try:
-                    wait.until(
-                        EC.presence_of_element_located(
-                            (By.CSS_SELECTOR, "a[href*='-p'][href*='.html']")
-                        )
-                    )
+                    wait.until(EC.presence_of_element_located((By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)))
                 except Exception:
                     pass
 
                 try:
-                    first = driver.find_element(By.CSS_SELECTOR, "a[href*='-p'][href*='.html']")
+                    first = driver.find_element(By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)
                     href = first.get_attribute("href")
                     if href and PRODUCT_URL_PATTERN.search(href):
                         return href
@@ -116,11 +117,11 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
 
             stage = "open_home"
             driver.get(HOME_URL)
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
+            wait.until(EC.presence_of_element_located((By.XPATH, "//body")))
 
             stage = "wait_preloader"
             try:
-                wait.until(EC.invisibility_of_element_located((By.ID, "page-preloader")))
+                wait.until(EC.invisibility_of_element_located((By.XPATH, "//*[@id='page-preloader']")))
             except Exception:
                 pass
 
@@ -137,9 +138,15 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
                 header_input = None
 
             if header_input is None:
-                header_input = _first_visible_by_css(driver=driver, By=By, selector=".quick-search-input")
+                try:
+                    candidate = driver.find_element(By.XPATH, HEADER_SEARCH_INPUT_XPATH_FALLBACK)
+                    if candidate.is_displayed() and candidate.is_enabled():
+                        header_input = candidate
+                except Exception:
+                    header_input = None
+
             if header_input is None:
-                header_input = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".quick-search-input")))
+                header_input = wait.until(EC.presence_of_element_located((By.XPATH, HEADER_SEARCH_INPUT_XPATH)))
 
             try:
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", header_input)
@@ -149,16 +156,8 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
             if not _safe_click(driver=driver, element=header_input):
                 raise ParserExecutionError("Unable to focus search input.")
 
-            stage = "wait_qsr_block"
-            try:
-                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".qsr-block")))
-            except Exception:
-                pass
-
             stage = "obtain_search_input"
-            search_input = _first_visible_by_css(driver=driver, By=By, selector=".qsr-input")
-            if search_input is None:
-                search_input = header_input
+            search_input = header_input
 
             stage = "fill_search_input"
             try:
@@ -175,64 +174,40 @@ def resolve_product_url(*, driver, query: Optional[str], url: Optional[str], log
                 submitted = _safe_click(driver=driver, element=btn)
             except Exception:
                 submitted = False
+
             if not submitted:
-                for selector in (
-                    ".qsr-submit",
-                    ".search-button-first-form",
-                    "form input[type='submit']",
-                ):
-                    btn = _first_visible_by_css(driver=driver, By=By, selector=selector)
-                    if btn and _safe_click(driver=driver, element=btn):
-                        submitted = True
-                        break
+                try:
+                    btn = driver.find_element(By.XPATH, HEADER_SEARCH_SUBMIT_XPATH_FALLBACK)
+                    submitted = _safe_click(driver=driver, element=btn)
+                except Exception:
+                    submitted = False
             if not submitted:
                 try:
                     search_input.send_keys(Keys.ENTER)
                 except Exception:
                     pass
 
-            stage = "wait_results"
+            stage = "wait_search_page"
             try:
-                wait.until(
-                    EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, ".qsr-products-list a[href*='-p'][href*='.html'], .qsr-showall")
-                    )
-                )
+                wait.until(lambda d: "/search/" in ((getattr(d, "current_url", "") or "")))
             except Exception:
-                pass
-
-            stage = "click_showall"
-            try:
-                show_all = _first_visible_by_css(driver=driver, By=By, selector=".qsr-showall")
-                if show_all is not None:
-                    _safe_click(driver=driver, element=show_all)
-            except Exception:
-                pass
-
-            stage = "open_first_product"
-            for selector in (
-                ".qsr-products-list a[href*='-p'][href*='.html']",
-                ".qsr-products a[href*='-p'][href*='.html']",
-                "a[href*='-p'][href*='.html']",
-            ):
-                first = _first_visible_by_css(driver=driver, By=By, selector=selector)
-                if first is None:
-                    continue
-                href = None
                 try:
-                    href = first.get_attribute("href")
+                    driver.get(urljoin(HOME_URL, f"/ukr/search/?Search={quote_plus(query)}"))
                 except Exception:
-                    href = None
-                if _safe_click(driver=driver, element=first):
-                    try:
-                        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "body")))
-                    except Exception:
-                        pass
-                    current = getattr(driver, "current_url", "") or ""
-                    if current and PRODUCT_URL_PATTERN.search(current):
-                        return current
+                    pass
+
+            stage = "resolve_first_product"
+            try:
+                wait.until(EC.presence_of_element_located((By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)))
+            except Exception:
+                pass
+            try:
+                first = driver.find_element(By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)
+                href = first.get_attribute("href")
                 if href and PRODUCT_URL_PATTERN.search(href):
                     return href
+            except Exception:
+                pass
 
             current = getattr(driver, "current_url", "") or ""
             if current and PRODUCT_URL_PATTERN.search(current):
