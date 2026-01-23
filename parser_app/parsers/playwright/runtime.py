@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import atexit
 import asyncio
+import concurrent.futures
+import os
 import threading
 
 
@@ -157,6 +159,22 @@ def run_in_browser_thread(fn):
 
     coro = fn(browser)
     future = asyncio.run_coroutine_threadsafe(coro, loop)
+    timeout_raw = os.getenv("PLAYWRIGHT_JOB_TIMEOUT_S", "").strip()
+    timeout_s: float | None
+    if timeout_raw == "":
+        timeout_s = 90.0
+    else:
+        try:
+            timeout_s = float(timeout_raw)
+        except Exception:
+            timeout_s = 90.0
+
+    if timeout_s is not None and timeout_s > 0:
+        try:
+            return future.result(timeout=timeout_s)
+        except concurrent.futures.TimeoutError as exc:
+            raise TimeoutError(f"Playwright job timed out after {timeout_s:.0f}s") from exc
+
     return future.result()
 
 

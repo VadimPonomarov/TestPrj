@@ -1,15 +1,6 @@
 from __future__ import annotations
 
-import os
-
 from ..config import BROWSER_EXTRA_HEADERS, BROWSER_USER_AGENT
-
-
-def _block_resources_enabled() -> bool:
-    raw = os.getenv("PLAYWRIGHT_BLOCK_RESOURCES", "").strip()
-    if raw == "":
-        return True
-    return raw in {"1", "true", "True", "yes", "YES"}
 
 
 async def create_page(*, browser=None):
@@ -23,28 +14,20 @@ async def create_page(*, browser=None):
     )
     page = await context.new_page()
 
-    if _block_resources_enabled():
-        async def _route_handler(route):
+    async def _route_handler(route):
+        try:
+            resource_type = route.request.resource_type
+        except Exception:
+            resource_type = None
+
+        if resource_type in {"image", "media", "font", "stylesheet"}:
             try:
-                resource_type = route.request.resource_type
+                await route.abort()
             except Exception:
-                resource_type = None
+                await route.continue_()
+            return
 
-            if resource_type in {"image", "media", "font"}:
-                try:
-                    await route.abort()
-                except Exception:
-                    await route.continue_()
-                return
+        await route.continue_()
 
-            if resource_type in {"stylesheet"}:
-                try:
-                    await route.abort()
-                except Exception:
-                    await route.continue_()
-                return
-
-            await route.continue_()
-
-        await page.route("**/*", _route_handler)
+    await page.route("**/*", _route_handler)
     return browser, context, page

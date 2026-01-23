@@ -163,6 +163,23 @@ def parse() -> Product:
         context = browser.new_context(viewport={"width": 1920, "height": 1080})
         page = context.new_page()
 
+        def _route_handler(route):
+            try:
+                resource_type = route.request.resource_type
+            except Exception:
+                resource_type = None
+
+            if resource_type in {"image", "media", "font", "stylesheet"}:
+                try:
+                    route.abort()
+                except Exception:
+                    route.continue_()
+                return
+
+            route.continue_()
+
+        page.route("**/*", _route_handler)
+
         try:
             page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60000)
 
@@ -170,7 +187,15 @@ def parse() -> Product:
             page.wait_for_selector(f"xpath={input_xpath}", timeout=20000)
             page.locator(f"xpath={input_xpath}").fill(QUERY, timeout=20000)
 
-            page.locator(f"xpath={submit_xpath}").click(timeout=20000)
+            try:
+                page.keyboard.press("Enter")
+            except Exception:
+                pass
+
+            try:
+                page.locator(f"xpath={submit_xpath}").first.click(timeout=2000, force=True)
+            except Exception:
+                pass
 
             search_url = f"https://brain.com.ua/ukr/search/?Search={quote_plus(QUERY)}"
             try:

@@ -1,146 +1,107 @@
-import atexit
-import os
-from typing import Iterable
+from __future__ import annotations
 
-import scrapy
-from scrapy import Spider
-from scrapy.http import Response
-from twisted.python.failure import Failure
-from twisted.internet import reactor
-from twisted.internet.threads import deferToThread, deferToThreadPool
-from twisted.python.threadpool import ThreadPool
+from typing import Any, Dict, Iterable, List, Mapping, Optional
+from urllib.parse import urljoin
 
-from core.enums import ParserType
-from core.exceptions import ParserExecutionError
-from core.schemas import ProductData
-from parser_app.services.factory import get_parser
-from parser_app.parsers.utils.product import build_product_data
+from parsel import Selector
 
-from ..items import ProductItem
-from ..utils import resolve_targets
-
-
-def _env_bool(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name, "").strip()
-    if raw == "":
-        return default
-    try:
-        return int(raw)
-    except Exception:
-        return default
+from parser_app.common.constants import (
+    ALL_CHARACTERISTICS_BUTTON_XPATH,
+    CHARACTERISTICS_KEY_REL_XPATH,
+    CHARACTERISTICS_ROWS_XPATH,
+    CHARACTERISTICS_VALUE_REL_XPATH,
+    COLOR_VALUE_XPATH,
+    DISPLAY_RESOLUTION_XPATH,
+    IMAGES_XPATH,
+    OLD_PRICE_XPATH,
+    PRICE_XPATH,
+    PRODUCT_CODE_XPATH,
+    REVIEW_ANCHOR_XPATH,
+    SCREEN_DIAGONAL_XPATH,
+    STORAGE_VALUE_XPATH,
+)
+from parser_app.common.utils import coerce_decimal, extract_int, normalise_space
 
 
-_PLAYWRIGHT_POOL: ThreadPool | None = None
-_SELENIUM_POOL: ThreadPool | None = None
+def _xpath_text(sel: Selector, xpath: str) -> str:
+    value = sel.xpath(xpath).xpath("normalize-space(string(.))").get() or ""
+    return normalise_space(value)
 
 
-def _get_thread_pool(*, name: str, maxthreads: int) -> ThreadPool:
-    pool = ThreadPool(minthreads=1, maxthreads=max(1, int(maxthreads)), name=name)
-    pool.start()
-    return pool
+def _normalise_image_url(base_url: str, src: str) -> str:
+    raw = (src or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("data:"):
+        return ""
+    if raw.startswith("//"):
+        return "https:" + raw
+    return urljoin(base_url, raw)
 
 
-def _get_playwright_pool() -> ThreadPool:
-    global _PLAYWRIGHT_POOL
-    if _PLAYWRIGHT_POOL is None:
-        # Playwright runtime uses a singleton browser with multiple contexts/pages.
-        # Allow Scrapy to schedule multiple concurrent parser jobs into that runtime.
-        maxthreads = _env_int("SCRAPY_PLAYWRIGHT_CONCURRENT_REQUESTS", 2)
-        _PLAYWRIGHT_POOL = _get_thread_pool(name="playwright-parser", maxthreads=maxthreads)
-        atexit.register(_PLAYWRIGHT_POOL.stop)
-    return _PLAYWRIGHT_POOL
+def extract_product_item(
+    *,
+    selector: Selector,
+    source_url: str,
+    metadata: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    name = _xpath_text(selector, "//h1[1]")
+    product_code = _xpath_text(selector, PRODUCT_CODE_XPATH)
+    manufacturer = _xpath_text(selector, "//*[@data-vendor][1]/@data-vendor")
 
+    color = _xpath_text(selector, COLOR_VALUE_XPATH)
+    storage = _xpath_text(selector, STORAGE_VALUE_XPATH)
+    screen_diagonal = _xpath_text(selector, SCREEN_DIAGONAL_XPATH)
+    display_resolution = _xpath_text(selector, DISPLAY_RESOLUTION_XPATH)
 
-def _get_selenium_pool() -> ThreadPool:
-    global _SELENIUM_POOL
-    if _SELENIUM_POOL is None:
-        # Selenium reuse mode must be serialized (single driver instance).
-        _SELENIUM_POOL = _get_thread_pool(name="selenium-parser", maxthreads=1)
-        atexit.register(_SELENIUM_POOL.stop)
-    return _SELENIUM_POOL
+    review_anchor_text = _xpath_text(selector, REVIEW_ANCHOR_XPATH)
+    review_count = extract_int(review_anchor_text) if review_anchor_text else 0
 
+    price_text = _xpath_text(selector, PRICE_XPATH)
+    old_price_text = _xpath_text(selector, OLD_PRICE_XPATH)
 
-class BrainParserSpider(Spider):
-    """Base spider coordinating Scrapy requests with parser backends."""
+    current_price = coerce_decimal(price_text)
+    old_price = coerce_decimal(old_price_text)
+    price = None
+    sale_price = None
+    if old_price is not None and current_price is not None:
+        price = old_price
+        sale_price = current_price
+    else:
+        price = current_price
+        sale_price = None
 
-    parser_type: ParserType = ParserType.BS4
-    name = "brain-parser"
+    images_raw = selector.xpath(IMAGES_XPATH).getall()
+    images: List[str] = []
+    for src in images_raw:
+        resolved = _normalise_image_url(source_url, src)
+        if resolved and resolved not in images:
+            images.append(resolved)
 
-    def __init__(self, urls: str | None = None, query: str | None = None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        config = resolve_targets(self.parser_type, urls, query)
-        self.target_urls: list[str] = config.urls
-        self.target_query = config.query
-        self.start_urls = list(self.target_urls)
+    characteristics: Dict[str, str] = {}
+    for row in selector.xpath(CHARACTERISTICS_ROWS_XPATH):
+        key = normalise_space(row.xpath(CHARACTERISTICS_KEY_REL_XPATH).xpath("normalize-space(string(.))").get() or "")
+        value = normalise_space(row.xpath(CHARACTERISTICS_VALUE_REL_XPATH).xpath("normalize-space(string(.))").get() or "")
+        if key and value:
+            characteristics[key] = value
 
-    # -- Scrapy hooks -------------------------------------------------
-    def start_requests(self) -> Iterable[scrapy.Request]:
-        for url in self.start_urls:
-            yield scrapy.Request(
-                url,
-                callback=self.parse_product,
-                errback=self.handle_error,
-                dont_filter=True,
-                cb_kwargs={"target_url": url},
-            )
+    merged_meta: Dict[str, Any] = {}
+    if metadata:
+        merged_meta.update(dict(metadata))
 
-    def handle_error(self, failure: Failure) -> None:
-        self.logger.error("Request failed: %s", failure)
-        self.crawler.stats.inc_value("brain/product_failures")
-
-    def parse_product(self, response: Response, target_url: str):
-        if self.parser_type in {ParserType.SELENIUM, ParserType.PLAYWRIGHT}:
-            if self.parser_type == ParserType.PLAYWRIGHT:
-                deferred = deferToThreadPool(
-                    reactor,
-                    _get_playwright_pool(),
-                    self.run_parser,
-                    response=response,
-                    target_url=target_url,
-                )
-            elif self.parser_type == ParserType.SELENIUM and _env_bool("SELENIUM_REUSE_DRIVER"):
-                deferred = deferToThreadPool(
-                    reactor,
-                    _get_selenium_pool(),
-                    self.run_parser,
-                    response=response,
-                    target_url=target_url,
-                )
-            else:
-                deferred = deferToThread(self.run_parser, response=response, target_url=target_url)
-
-            def _on_success(product: ProductData):
-                self.crawler.stats.inc_value("brain/products_parsed")
-                return ProductItem.from_product_data(product)
-
-            def _on_error(failure: Failure):
-                self.logger.error("Parser error for %s: %s", target_url, failure)
-                self.crawler.stats.inc_value("brain/parser_errors")
-                return None
-
-            deferred.addCallback(_on_success)
-            deferred.addErrback(_on_error)
-            return deferred
-
-        try:
-            product = self.run_parser(response=response, target_url=target_url)
-        except ParserExecutionError as exc:
-            self.logger.error("Parser error for %s: %s", target_url, exc)
-            self.crawler.stats.inc_value("brain/parser_errors")
-            return
-
-        yield ProductItem.from_product_data(product)
-        self.crawler.stats.inc_value("brain/products_parsed")
-
-    # -- Parser integration -------------------------------------------
-    def run_parser(self, response: scrapy.http.Response, target_url: str) -> ProductData:
-        if self.parser_type == ParserType.BS4:
-            html = getattr(response, "text", None)
-            if html:
-                return build_product_data(url=target_url, html=html, parser_label="BeautifulSoup")
-        parser = get_parser(self.parser_type)
-        return parser.parse(query=self.target_query, url=target_url)
+    return {
+        "name": name,
+        "product_code": product_code,
+        "source_url": source_url,
+        "price": str(price) if price is not None else None,
+        "sale_price": str(sale_price) if sale_price is not None else None,
+        "manufacturer": manufacturer,
+        "color": color,
+        "storage": storage,
+        "review_count": review_count,
+        "screen_diagonal": screen_diagonal,
+        "display_resolution": display_resolution,
+        "images": images,
+        "characteristics": characteristics,
+        "metadata": merged_meta,
+    }

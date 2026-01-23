@@ -1,9 +1,16 @@
+import sys
 from typing import Any, Dict, Mapping, Sequence
 
 
 _MAX_STR_LEN = 200
 _MAX_LIST_ITEMS = 10
 _MAX_DICT_ITEMS = 20
+
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 
 def _format_scalar(value: Any) -> str:

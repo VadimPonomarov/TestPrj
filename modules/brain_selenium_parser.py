@@ -1,6 +1,7 @@
 import argparse
 import re
 from urllib.parse import quote_plus
+from urllib.parse import urljoin
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -137,6 +138,21 @@ def parse() -> Product:
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--mute-audio")
+    options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--window-size=1920,1080")
+    options.add_experimental_option(
+        "prefs",
+        {
+            "profile.managed_default_content_settings.images": 2,
+            "profile.managed_default_content_settings.stylesheets": 2,
+            "profile.managed_default_content_settings.fonts": 2,
+            "profile.managed_default_content_settings.media_stream": 2,
+            "profile.managed_default_content_settings.sound": 2,
+        },
+    )
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
@@ -147,13 +163,52 @@ def parse() -> Product:
         wait = WebDriverWait(driver, 30)
         driver.get(HOME_URL)
 
-        wait.until(EC.presence_of_element_located((By.XPATH, HOME_SEARCH_INPUT_XPATH)))
-        search_input = driver.find_element(By.XPATH, HOME_SEARCH_INPUT_XPATH)
-        search_input.clear()
-        search_input.send_keys(QUERY)
+        input_xpath = HOME_SEARCH_INPUT_XPATH
+        submit_xpath = HOME_SEARCH_SUBMIT_XPATH
+        for ix, sx in (
+            (HOME_SEARCH_INPUT_XPATH_FALLBACK, HOME_SEARCH_SUBMIT_XPATH_FALLBACK),
+            (HOME_SEARCH_INPUT_XPATH, HOME_SEARCH_SUBMIT_XPATH),
+        ):
+            try:
+                nodes = driver.find_elements(By.XPATH, ix)
+                if nodes and nodes[0].is_displayed():
+                    input_xpath = ix
+                    submit_xpath = sx
+                    break
+            except Exception:
+                continue
 
-        submit = driver.find_element(By.XPATH, HOME_SEARCH_SUBMIT_XPATH)
-        submit.click()
+        wait.until(EC.presence_of_element_located((By.XPATH, input_xpath)))
+        search_input = driver.find_element(By.XPATH, input_xpath)
+        try:
+            search_input.click()
+        except Exception:
+            pass
+        try:
+            search_input.send_keys(Keys.CONTROL, "a")
+            search_input.send_keys(Keys.DELETE)
+        except Exception:
+            try:
+                driver.execute_script("arguments[0].value = ''", search_input)
+            except Exception:
+                pass
+
+        try:
+            search_input.send_keys(QUERY)
+        except Exception:
+            driver.execute_script("arguments[0].value = arguments[1]", search_input, QUERY)
+
+        submit = driver.find_element(By.XPATH, submit_xpath)
+        try:
+            submit.click()
+        except Exception:
+            try:
+                driver.execute_script("arguments[0].click();", submit)
+            except Exception:
+                try:
+                    search_input.send_keys(Keys.ENTER)
+                except Exception:
+                    pass
 
         # Ensure we land on the full search results page.
         search_url = f"https://brain.com.ua/ukr/search/?Search={quote_plus(QUERY)}"
@@ -171,7 +226,21 @@ def parse() -> Product:
 
         wait.until(EC.presence_of_element_located((By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)))
         first_link = driver.find_element(By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)
-        first_link.click()
+        href = None
+        try:
+            href = first_link.get_attribute("href")
+        except Exception:
+            href = None
+        if href:
+            driver.get(urljoin(driver.current_url, href))
+        else:
+            try:
+                first_link.click()
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", first_link)
+                except Exception:
+                    pass
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//h1")))
         # Ensure product code is present (page fully loaded)

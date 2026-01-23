@@ -9,7 +9,7 @@ from parser_app.serializers import ProductSerializer
 class ProductPersistencePipeline:
     """Persist ProductItem using DRF serializer logic."""
 
-    def process_item(self, item: Dict[str, Any], spider):
+    def process_item(self, item: Dict[str, Any], spider=None):
         product_code = item.get("product_code")
         source_url = item.get("source_url")
 
@@ -25,5 +25,6 @@ class ProductPersistencePipeline:
         with transaction.atomic():
             product = serializer.save()
 
-        spider.logger.info("Persisted product %s", product.product_code)
+        if spider is not None:
+            spider.logger.info("Persisted product %s", product.product_code)
         return item
