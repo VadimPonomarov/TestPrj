@@ -36,8 +36,12 @@ ITEM_PIPELINES = {
     "brain_scraper.pipelines.ProductPersistencePipeline": 300,
 }
 
+if os.getenv("SCRAPY_DISABLE_DB_PIPELINE", "").strip():
+    ITEM_PIPELINES = {}
+
 EXTENSIONS = {
     "scrapy.extensions.closespider.CloseSpider": 500,
+    "brain_scraper.extensions.SpiderTimingExtension": 10,
 }
 
 # CloseSpider rules (all optional; set via env when needed)
