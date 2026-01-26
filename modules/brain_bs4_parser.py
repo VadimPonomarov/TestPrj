@@ -1,5 +1,7 @@
 import argparse
+import re
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 
 import requests
 from lxml import html
@@ -8,9 +10,9 @@ from parser_app.common.constants import *
 from parser_app.common.csvio import *
 from parser_app.common.db import *
 from parser_app.common.output import *
-from parser_app.common.schema import *
-from parser_app.common.utils import *
-
+from parser_app.common.schema import Product
+from parser_app.common.utils import coerce_decimal
+from parser_app.common.decorators import time_execution
 
 def _extract_jsonld_product(tree: html.HtmlElement) -> Optional[Dict[str, Any]]:
     for node in tree.xpath("//script[@type='application/ld+json']/text()"):  # type: ignore[call-arg]
@@ -138,6 +140,7 @@ def _extract_display_info(characteristics: Dict[str, str]) -> tuple[str, str]:
     return diagonal, resolution
 
 
+@time_execution("Парсинг с использованием BeautifulSoup")
 def parse_product(url: str) -> Product:
     response = requests.get(url, headers=REQUEST_HEADERS, timeout=30)
     response.raise_for_status()
@@ -186,15 +189,13 @@ def parse_product(url: str) -> Product:
         metadata={"parser": "BS4"},
     )
 
-
+@time_execution("Parsing - BS4")
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--url",
-        default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html",
-    )
-    parser.add_argument("--csv", default="")
-    parser.add_argument("--save-db", action="store_true")
+    parser = argparse.ArgumentParser(description="Parse product page using BS4")
+    parser.add_argument("url", type=str, nargs='?', default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html", 
+                        help="URL of the product page (default: iPhone 15 example)")
+    parser.add_argument("--csv", type=str, default="", help="Path to output CSV file")
+    parser.add_argument("--no-save-db", action="store_false", dest="save_db", help="Disable saving to database")
     args = parser.parse_args()
 
     product = parse_product(args.url)
@@ -206,24 +207,11 @@ def main() -> None:
         csv_path = f"temp/assignment/outputs/bs4_{ts}.csv"
 
     save_csv_row(product.to_dict(), csv_path)
+    print(f"[INFO] CSV saved: {csv_path}")
 
     if args.save_db:
-        defaults = {
-            "name": product.name,
-            "source_url": product.source_url,
-            "price": product.price,
-            "sale_price": product.sale_price,
-            "manufacturer": product.manufacturer or None,
-            "color": product.color or None,
-            "storage": product.storage or None,
-            "review_count": product.review_count,
-            "screen_diagonal": product.screen_diagonal or None,
-            "display_resolution": product.display_resolution or None,
-            "images": product.images,
-            "characteristics": product.characteristics,
-            "metadata": product.metadata,
-        }
-        save_product_to_db(product_code=product.product_code, defaults=defaults)
+        save_product_via_serializer(data=product.to_dict())
+        print(f"[INFO] Product persisted to DB via serializer (product_code={product.product_code})")
 
 
 if __name__ == "__main__":

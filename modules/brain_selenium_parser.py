@@ -1,26 +1,25 @@
 import argparse
-import re
-from urllib.parse import quote_plus
-from urllib.parse import urljoin
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+from urllib.parse import quote_plus
+from urllib.parse import urljoin
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 from parser_app.common.constants import *
 from parser_app.common.csvio import *
 from parser_app.common.db import *
+from parser_app.common.decorators import time_execution
 from parser_app.common.output import *
-from parser_app.common.schema import *
-from parser_app.common.utils import *
-
+from parser_app.common.schema import Product
+from parser_app.common.utils import coerce_decimal, extract_int
 
 QUERY = DEFAULT_QUERY
 
@@ -133,13 +132,25 @@ def _extract_prices(driver: webdriver.Chrome) -> tuple[Optional[Decimal], Option
     return current_price, None
 
 
-def parse() -> Product:
-    options = Options()
+def parse_selenium(query: str) -> Product:
+    options = webdriver.ChromeOptions()
+    # Headless mode
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
+    
+    # Disable images and media
+    prefs = {
+        'profile.managed_default_content_settings.images': 2,  # Disable images
+        'profile.managed_default_content_settings.stylesheets': 2,  # Disable CSS
+        'profile.managed_default_content_settings.media_stream': 2,  # Disable media
+        'profile.managed_default_content_settings.mixed_script': 2,  # Disable mixed scripts
+        'profile.managed_default_content_settings.javascript': 1,  # Keep JS enabled for dynamic content
+    }
+    options.add_experimental_option('prefs', prefs)
+    
+    driver = webdriver.Chrome(options=options)
     options.add_argument("--mute-audio")
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--window-size=1920,1080")
@@ -299,13 +310,16 @@ def parse() -> Product:
             pass
 
 
+@time_execution("Parsing - Selenium")
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="")
-    parser.add_argument("--save-db", action="store_true")
+    parser = argparse.ArgumentParser(description="Parse product page using Selenium")
+    parser.add_argument("url", type=str, nargs='?', default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html",
+                        help="URL of the product page (default: iPhone 15 example)")
+    parser.add_argument("--csv", type=str, default="", help="Path to output CSV file")
+    parser.add_argument("--no-save-db", action="store_false", dest="save_db", help="Disable saving to database")
     args = parser.parse_args()
 
-    product = parse()
+    product = parse_selenium(args.url)
     print_mapping(product.to_dict())
 
     csv_path = args.csv
@@ -314,24 +328,11 @@ def main() -> None:
         csv_path = f"temp/assignment/outputs/selenium_{ts}.csv"
 
     save_csv_row(product.to_dict(), csv_path)
+    print(f"[INFO] CSV saved: {csv_path}")
 
     if args.save_db:
-        defaults = {
-            "name": product.name,
-            "source_url": product.source_url,
-            "price": product.price,
-            "sale_price": product.sale_price,
-            "manufacturer": product.manufacturer or None,
-            "color": product.color or None,
-            "storage": product.storage or None,
-            "review_count": product.review_count,
-            "screen_diagonal": product.screen_diagonal or None,
-            "display_resolution": product.display_resolution or None,
-            "images": product.images,
-            "characteristics": product.characteristics,
-            "metadata": product.metadata,
-        }
-        save_product_to_db(product_code=product.product_code, defaults=defaults)
+        save_product_via_serializer(data=product.to_dict())
+        print(f"[INFO] Product persisted to DB via serializer (product_code={product.product_code})")
 
 
 if __name__ == "__main__":

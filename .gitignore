@@ -85,7 +85,6 @@ db.sqlite3-journal
 
 # Logs
 logs/
-*.log
 
 # Local development
 *.local
@@ -113,3 +112,4 @@ scrapy_project/outputs/
 
 # Project specific
 mediafiles/
+docs/*
