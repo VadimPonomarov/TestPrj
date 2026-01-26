@@ -50,7 +50,7 @@ class ProductScrapeRequestSerializer(serializers.Serializer):
         ParserType.BS4.value: {
             "url": (
                 "https://brain.com.ua/ukr/"
-                "Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
+                "Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html"
             )
         },
         ParserType.SELENIUM.value: {

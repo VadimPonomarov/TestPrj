@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 QUERY = DEFAULT_QUERY
 
 
+def _is_product_url(url: str) -> bool:
+    return "-p" in (url or "") and ".html" in (url or "")
+
+
 def _empty_product(source_url: str = "", metadata: Optional[Dict[str, Any]] = None) -> Product:
     return Product(
         name="",
@@ -105,7 +109,7 @@ async def _goto_first_product_from_search_async(page: Page) -> None:
     """Navigate to the first product from search results."""
     try:
         await page.wait_for_selector(
-            f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}", timeout=20000, state="attached"
+            f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}", timeout=15000, state="attached"
         )
 
         link = page.locator(f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}").first
@@ -115,16 +119,14 @@ async def _goto_first_product_from_search_async(page: Page) -> None:
             raise RuntimeError("Failed to resolve first product link href")
 
         logger.info(f"Navigating to product: {href}")
-        await page.goto(
-            urljoin(page.url, href), wait_until="domcontentloaded", timeout=60000
-        )
+        await page.goto(urljoin(page.url, href), wait_until="domcontentloaded", timeout=45000)
         try:
-            await page.wait_for_selector("xpath=//h1", timeout=20000)
+            await page.wait_for_selector("xpath=//h1", timeout=12000)
         except Exception:
             pass
 
         try:
-            await page.wait_for_selector(f"xpath={PRODUCT_CODE_XPATH}", timeout=20000)
+            await page.wait_for_selector(f"xpath={PRODUCT_CODE_XPATH}", timeout=12000)
         except Exception:
             pass
 
@@ -289,7 +291,7 @@ async def _extract_review_count_async(page: Page) -> int:
         return 0
 
 
-async def parse_async(url: str) -> Product:
+async def parse_async(url: str, query: str, fast: bool = False) -> Product:
     """Parse product page asynchronously."""
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -329,15 +331,8 @@ async def parse_async(url: str) -> Product:
                 locale="en-US",
             )
 
-            await context.route("**/*.{png,jpg,jpeg,webp,svg,gif,ico}", lambda route: route.abort())
-            await context.route("**/*.css", lambda route: route.abort())
-            await context.route("**/*.woff*", lambda route: route.abort())
-            await context.route("**/*.ttf", lambda route: route.abort())
-            await context.route("**/*.mp4", lambda route: route.abort())
-            await context.route("**/*.webm", lambda route: route.abort())
-            await context.route("**/*.mp3", lambda route: route.abort())
-
             page = await context.new_page()
+            page.set_default_timeout(12000)
 
             async def _route_handler(route):
                 try:
@@ -355,7 +350,7 @@ async def parse_async(url: str) -> Product:
             await context.route("**/*", _route_handler)
 
             try:
-                response = await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                response = await page.goto(url, timeout=45000, wait_until="domcontentloaded")
                 if not response or not response.ok:
                     logger.error(f"Failed to load URL {url}")
                     return _empty_product(source_url=url, metadata={"parser": "Playwright"})
@@ -363,12 +358,12 @@ async def parse_async(url: str) -> Product:
                 logger.error(f"Navigation error for {url}: {e}")
                 return _empty_product(source_url=url, metadata={"parser": "Playwright"})
 
-            is_product_url = "-p" in (page.url or "") and ".html" in (page.url or "")
+            is_product_url = _is_product_url(page.url or "")
             if not is_product_url:
                 try:
                     if (page.url or "").rstrip("/") == HOME_URL.rstrip("/"):
                         input_xpath, submit_xpath = await _resolve_visible_pair_async(page)
-                        await page.fill(f"xpath={input_xpath}", QUERY)
+                        await page.fill(f"xpath={input_xpath}", query)
 
                         try:
                             await page.evaluate(
@@ -381,9 +376,9 @@ async def parse_async(url: str) -> Product:
                             pass
 
                         try:
-                            await page.locator("#page-preloader").wait_for(
-                                state="hidden", timeout=5000
-                            )
+                            preloader = page.locator("#page-preloader")
+                            if await preloader.count() > 0:
+                                await preloader.first.wait_for(state="hidden", timeout=2000)
                         except Exception:
                             pass
 
@@ -402,14 +397,14 @@ async def parse_async(url: str) -> Product:
                                 )
 
                         try:
-                            await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                            await page.wait_for_load_state("domcontentloaded", timeout=8000)
                         except Exception:
                             pass
 
                         try:
                             await page.wait_for_selector(
                                 f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}",
-                                timeout=20000,
+                                timeout=15000,
                                 state="attached",
                             )
                         except Exception:
@@ -437,15 +432,16 @@ async def parse_async(url: str) -> Product:
                     continue
 
             try:
-                await page.wait_for_selector(f"xpath={PRICE_XPATH}", timeout=15000)
+                await page.wait_for_selector(f"xpath={PRICE_XPATH}", timeout=8000)
             except Exception:
                 pass
 
-            await _open_all_characteristics_async(page)
+            if not fast:
+                await _open_all_characteristics_async(page)
 
             name = await _extract_name_async(page)
             price, sale_price = await _extract_prices_async(page)
-            images = await _extract_images_async(page)
+            images = [] if fast else await _extract_images_async(page)
             characteristics = await _extract_characteristics_async(page)
             review_count = await _extract_review_count_async(page)
 
@@ -497,24 +493,40 @@ async def async_main() -> None:
         "url",
         type=str,
         nargs="?",
-        default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html",
-        help="URL of the product page to parse",
+        default=HOME_URL,
+        help="Product URL (direct) or start URL for search workflow (default: home page)",
+    )
+    parser.add_argument(
+        "--query",
+        type=str,
+        default=DEFAULT_QUERY,
+        help="Search query (used when url is not a product page)",
     )
     parser.add_argument(
         "--csv", type=str, default="", help="Path to output CSV file (optional)"
     )
     parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Faster run (skips expensive steps like expanding all characteristics)",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--save-db", action="store_true", dest="save_db", help="Save to database")
+    group.add_argument(
         "--no-save-db",
         action="store_false",
         dest="save_db",
-        help="Disable saving to database",
+        help="Do not save to database",
     )
+    parser.set_defaults(save_db=False)
 
     args = parser.parse_args()
 
     try:
         logger.info(f"Starting parser for URL: {args.url}")
-        product = await parse_async(args.url)
+        query = (args.query or "").strip() or DEFAULT_QUERY
+        url = (args.url or "").strip() or HOME_URL
+        product = await parse_async(url, query, fast=bool(args.fast))
 
         print_mapping(product.to_dict())
 

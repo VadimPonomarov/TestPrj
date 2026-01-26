@@ -1,7 +1,7 @@
 import argparse
 import re
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
 import requests
 from lxml import html
@@ -9,10 +9,11 @@ from lxml import html
 from parser_app.common.constants import *
 from parser_app.common.csvio import *
 from parser_app.common.db import *
+from parser_app.common.decorators import time_execution
 from parser_app.common.output import *
 from parser_app.common.schema import Product
 from parser_app.common.utils import coerce_decimal
-from parser_app.common.decorators import time_execution
+
 
 def _extract_jsonld_product(tree: html.HtmlElement) -> Optional[Dict[str, Any]]:
     for node in tree.xpath("//script[@type='application/ld+json']/text()"):  # type: ignore[call-arg]
@@ -192,13 +193,29 @@ def parse_product(url: str) -> Product:
 @time_execution("Parsing - BS4")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Parse product page using BS4")
-    parser.add_argument("url", type=str, nargs='?', default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html", 
-                        help="URL of the product page (default: iPhone 15 example)")
+    parser.add_argument(
+        "url",
+        type=str,
+        nargs="?",
+        default="",
+        help="URL of the product page",
+    )
+    parser.add_argument(
+        "--url",
+        type=str,
+        default="",
+        dest="url_opt",
+        help="URL of the product page",
+    )
     parser.add_argument("--csv", type=str, default="", help="Path to output CSV file")
-    parser.add_argument("--no-save-db", action="store_false", dest="save_db", help="Disable saving to database")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--save-db", action="store_true", dest="save_db", help="Save to database")
+    group.add_argument("--no-save-db", action="store_false", dest="save_db", help="Do not save to database")
+    parser.set_defaults(save_db=False)
     args = parser.parse_args()
 
-    product = parse_product(args.url)
+    url = (args.url_opt or args.url or "").strip() or "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html"
+    product = parse_product(url)
     print_mapping(product.to_dict())
 
     csv_path = args.csv

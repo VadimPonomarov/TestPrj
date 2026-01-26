@@ -24,6 +24,10 @@ from parser_app.common.utils import coerce_decimal, extract_int
 QUERY = DEFAULT_QUERY
 
 
+def _is_product_url(url: str) -> bool:
+    return "-p" in (url or "") and ".html" in (url or "")
+
+
 def _text_or_empty(driver: webdriver.Chrome, xpath: str) -> str:
     try:
         el = driver.find_element(By.XPATH, xpath)
@@ -132,7 +136,7 @@ def _extract_prices(driver: webdriver.Chrome) -> tuple[Optional[Decimal], Option
     return current_price, None
 
 
-def parse_selenium(query: str) -> Product:
+def parse_selenium(url: str, query: str) -> Product:
     options = webdriver.ChromeOptions()
     # Headless mode
     options.add_argument("--headless=new")
@@ -150,7 +154,6 @@ def parse_selenium(query: str) -> Product:
     }
     options.add_experimental_option('prefs', prefs)
     
-    driver = webdriver.Chrome(options=options)
     options.add_argument("--mute-audio")
     options.add_argument("--blink-settings=imagesEnabled=false")
     options.add_argument("--window-size=1920,1080")
@@ -172,86 +175,99 @@ def parse_selenium(query: str) -> Product:
 
     try:
         wait = WebDriverWait(driver, 30)
-        driver.get(HOME_URL)
 
-        input_xpath = HOME_SEARCH_INPUT_XPATH
-        submit_xpath = HOME_SEARCH_SUBMIT_XPATH
-        for ix, sx in (
-            (HOME_SEARCH_INPUT_XPATH_FALLBACK, HOME_SEARCH_SUBMIT_XPATH_FALLBACK),
-            (HOME_SEARCH_INPUT_XPATH, HOME_SEARCH_SUBMIT_XPATH),
-        ):
-            try:
-                nodes = driver.find_elements(By.XPATH, ix)
-                if nodes and nodes[0].is_displayed():
-                    input_xpath = ix
-                    submit_xpath = sx
-                    break
-            except Exception:
-                continue
+        start_url = (url or "").strip() or HOME_URL
+        start_query = (query or "").strip() or DEFAULT_QUERY
 
-        wait.until(EC.presence_of_element_located((By.XPATH, input_xpath)))
-        search_input = driver.find_element(By.XPATH, input_xpath)
-        try:
-            search_input.click()
-        except Exception:
-            pass
-        try:
-            search_input.send_keys(Keys.CONTROL, "a")
-            search_input.send_keys(Keys.DELETE)
-        except Exception:
+        if _is_product_url(start_url):
+            driver.get(start_url)
+        else:
+            driver.get(HOME_URL)
+
+            input_xpath = HOME_SEARCH_INPUT_XPATH
+            submit_xpath = HOME_SEARCH_SUBMIT_XPATH
+            for ix, sx in (
+                (HOME_SEARCH_INPUT_XPATH_FALLBACK, HOME_SEARCH_SUBMIT_XPATH_FALLBACK),
+                (HOME_SEARCH_INPUT_XPATH, HOME_SEARCH_SUBMIT_XPATH),
+            ):
+                try:
+                    nodes = driver.find_elements(By.XPATH, ix)
+                    if nodes and nodes[0].is_displayed():
+                        input_xpath = ix
+                        submit_xpath = sx
+                        break
+                except Exception:
+                    continue
+
+            wait.until(EC.presence_of_element_located((By.XPATH, input_xpath)))
+            search_input = driver.find_element(By.XPATH, input_xpath)
             try:
-                driver.execute_script("arguments[0].value = ''", search_input)
+                search_input.click()
             except Exception:
                 pass
-
-        try:
-            search_input.send_keys(QUERY)
-        except Exception:
-            driver.execute_script("arguments[0].value = arguments[1]", search_input, QUERY)
-
-        submit = driver.find_element(By.XPATH, submit_xpath)
-        try:
-            submit.click()
-        except Exception:
             try:
-                driver.execute_script("arguments[0].click();", submit)
+                search_input.send_keys(Keys.CONTROL, "a")
+                search_input.send_keys(Keys.DELETE)
             except Exception:
                 try:
-                    search_input.send_keys(Keys.ENTER)
+                    driver.execute_script("arguments[0].value = ''", search_input)
                 except Exception:
                     pass
 
-        # Ensure we land on the full search results page.
-        search_url = f"https://brain.com.ua/ukr/search/?Search={quote_plus(QUERY)}"
-        try:
-            wait.until(lambda d: "/search/" in ((getattr(d, "current_url", "") or "")))
-        except Exception:
-            driver.get(search_url)
+            try:
+                search_input.send_keys(start_query)
+            except Exception:
+                driver.execute_script(
+                    "arguments[0].value = arguments[1]", search_input, start_query
+                )
 
-        # Wait until product links are available in the DOM.
-        wait.until(
-            EC.presence_of_element_located(
-                (By.XPATH, "//a[contains(@href,'-p') and contains(@href,'.html')]")
+            submit = driver.find_element(By.XPATH, submit_xpath)
+            try:
+                submit.click()
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", submit)
+                except Exception:
+                    try:
+                        search_input.send_keys(Keys.ENTER)
+                    except Exception:
+                        pass
+
+            # Ensure we land on the full search results page.
+            search_url = f"https://brain.com.ua/ukr/search/?Search={quote_plus(start_query)}"
+            try:
+                wait.until(
+                    lambda d: "/search/" in ((getattr(d, "current_url", "") or ""))
+                )
+            except Exception:
+                driver.get(search_url)
+
+            # Wait until product links are available in the DOM.
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//a[contains(@href,'-p') and contains(@href,'.html')]")
+                )
             )
-        )
 
-        wait.until(EC.presence_of_element_located((By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)))
-        first_link = driver.find_element(By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)
-        href = None
-        try:
-            href = first_link.get_attribute("href")
-        except Exception:
+            wait.until(
+                EC.presence_of_element_located((By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH))
+            )
+            first_link = driver.find_element(By.XPATH, SEARCH_FIRST_PRODUCT_LINK_XPATH)
             href = None
-        if href:
-            driver.get(urljoin(driver.current_url, href))
-        else:
             try:
-                first_link.click()
+                href = first_link.get_attribute("href")
             except Exception:
+                href = None
+            if href:
+                driver.get(urljoin(driver.current_url, href))
+            else:
                 try:
-                    driver.execute_script("arguments[0].click();", first_link)
+                    first_link.click()
                 except Exception:
-                    pass
+                    try:
+                        driver.execute_script("arguments[0].click();", first_link)
+                    except Exception:
+                        pass
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//h1")))
         # Ensure product code is present (page fully loaded)
@@ -313,13 +329,27 @@ def parse_selenium(query: str) -> Product:
 @time_execution("Parsing - Selenium")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Parse product page using Selenium")
-    parser.add_argument("url", type=str, nargs='?', default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html",
-                        help="URL of the product page (default: iPhone 15 example)")
+    parser.add_argument(
+        "url",
+        type=str,
+        nargs="?",
+        default=HOME_URL,
+        help="Product URL (direct) or start URL for search workflow (default: home page)",
+    )
+    parser.add_argument(
+        "--query",
+        type=str,
+        default=DEFAULT_QUERY,
+        help="Search query (used when url is not a product page)",
+    )
     parser.add_argument("--csv", type=str, default="", help="Path to output CSV file")
-    parser.add_argument("--no-save-db", action="store_false", dest="save_db", help="Disable saving to database")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--save-db", action="store_true", dest="save_db", help="Save to database")
+    group.add_argument("--no-save-db", action="store_false", dest="save_db", help="Do not save to database")
+    parser.set_defaults(save_db=False)
     args = parser.parse_args()
 
-    product = parse_selenium(args.url)
+    product = parse_selenium(args.url, args.query)
     print_mapping(product.to_dict())
 
     csv_path = args.csv

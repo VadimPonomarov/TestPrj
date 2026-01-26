@@ -20,19 +20,19 @@ poetry install
 Запуск (URL напряму):
 
 ```bash
-poetry run python modules/brain_bs4_parser.py --url "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
+poetry run python modules/brain_bs4_parser.py "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html"
 ```
 
 Збереження в CSV:
 
 ```bash
-poetry run python modules/brain_bs4_parser.py --url "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html" --csv temp/assignment/outputs/bs4.csv
+poetry run python modules/brain_bs4_parser.py "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html" --csv temp/assignment/outputs/bs4.csv
 ```
 
 Збереження у БД (Django ORM):
 
 ```bash
-poetry run python modules/brain_bs4_parser.py --url "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html" --save-db
+poetry run python modules/brain_bs4_parser.py "https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html" --save-db
 ```
 
 ## 2) Запуск Selenium (Chrome)
@@ -45,6 +45,12 @@ poetry run python modules/brain_bs4_parser.py --url "https://brain.com.ua/ukr/Mo
 
 ```bash
 poetry run python modules/brain_selenium_parser.py
+```
+
+Workflow через пошук:
+
+```bash
+poetry run python modules/brain_selenium_parser.py --query "Apple iPhone 15 128GB Black"
 ```
 
 Збереження у CSV:
@@ -81,6 +87,12 @@ poetry run playwright install
 
 ```bash
 poetry run python modules/brain_playwright_parser.py
+```
+
+Workflow через пошук:
+
+```bash
+poetry run python modules/brain_playwright_parser.py --query "Apple iPhone 15 128GB Black"
 ```
 
 Збереження у CSV:
@@ -131,6 +143,10 @@ poetry run python manage.py runserver
 - `POST /api/products/scrape/selenium/`
 - `POST /api/products/scrape/playwright/`
 
+Експорт з БД у CSV:
+
+- `GET /api/products/export-csv/`
+
 Тіло запиту (URL напряму):
 
 ```json
@@ -145,4 +161,10 @@ poetry run python manage.py runserver
 {
   "query": "Apple iPhone 15 128GB Black"
 }
+```
+
+Приклад завантаження CSV у файл:
+
+```bash
+curl -L "http://127.0.0.1:8000/api/products/export-csv/" -o "temp/assignment/outputs/products.csv"
 ```
