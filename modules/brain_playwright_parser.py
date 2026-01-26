@@ -1,12 +1,13 @@
 import argparse
+import asyncio
 import json
+import logging
+import re
 from datetime import datetime
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
-from asgiref.sync import async_to_sync
-from lxml import html
 from playwright.async_api import async_playwright, Page
 
 from parser_app.common.constants import (
@@ -14,6 +15,7 @@ from parser_app.common.constants import (
     CHARACTERISTICS_ANCHOR_XPATH,
     CHARACTERISTICS_ROWS_XPATH,
     DEFAULT_QUERY,
+    HOME_URL,
     HOME_SEARCH_INPUT_XPATH,
     HOME_SEARCH_INPUT_XPATH_FALLBACK,
     HOME_SEARCH_SUBMIT_XPATH,
@@ -30,69 +32,117 @@ from parser_app.common.output import print_mapping
 from parser_app.common.schema import Product
 from parser_app.common.utils import coerce_decimal
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 QUERY = DEFAULT_QUERY
 
 
+def _empty_product(source_url: str = "", metadata: Optional[Dict[str, Any]] = None) -> Product:
+    return Product(
+        name="",
+        color="",
+        storage="",
+        manufacturer="",
+        price=None,
+        sale_price=None,
+        source_url=source_url,
+        metadata=metadata or {},
+    )
+
+
 async def _text_or_empty_async(page: Page, xpath: str) -> str:
+    """Get text content from element matching xpath or return empty string."""
     try:
         el = page.locator(f"xpath={xpath}").first
-        text = ""
+        if not await el.is_visible(timeout=5000):
+            return ""
+
         try:
             text = await el.inner_text(timeout=5000) or ""
-        except Exception:
-            text = ""
+            if text.strip():
+                return " ".join(text.split())
+        except Exception as e:
+            logger.debug(f"Error getting inner_text: {e}")
 
-        if not text.strip():
-            try:
-                text = await el.text_content(timeout=5000) or ""
-            except Exception:
-                text = ""
-
-        return " ".join(text.split())
-    except Exception:
+        try:
+            text = await el.text_content(timeout=5000) or ""
+            return " ".join(text.split())
+        except Exception as e:
+            logger.debug(f"Error getting text_content: {e}")
+            return ""
+    except Exception as e:
+        logger.debug(f"Error in _text_or_empty_async: {e}")
         return ""
 
 
 async def _resolve_visible_pair_async(page: Page) -> Tuple[str, str]:
+    """Resolve the correct input/submit button pair that's visible on the page."""
     pairs = [
         (HOME_SEARCH_INPUT_XPATH_FALLBACK, HOME_SEARCH_SUBMIT_XPATH_FALLBACK),
         (HOME_SEARCH_INPUT_XPATH, HOME_SEARCH_SUBMIT_XPATH),
     ]
+
     for input_xpath, submit_xpath in pairs:
         try:
-            if await page.locator(f"xpath={input_xpath}").is_visible() and await page.locator(
-                f"xpath={submit_xpath}"
-            ).is_visible():
+            input_visible = await page.locator(f"xpath={input_xpath}").is_visible()
+            submit_visible = await page.locator(f"xpath={submit_xpath}").is_visible()
+
+            if input_visible and submit_visible:
                 return input_xpath, submit_xpath
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error checking visibility for pair {input_xpath}: {e}")
             continue
+
+    logger.warning("No visible input/submit pair found, using defaults")
     return HOME_SEARCH_INPUT_XPATH, HOME_SEARCH_SUBMIT_XPATH
 
 
 async def _goto_first_product_from_search_async(page: Page) -> None:
-    await page.wait_for_selector(
-        f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}", timeout=20000, state="attached"
-    )
-    link = page.locator(f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}").first
-    href = await link.get_attribute("href")
-    if not href:
-        raise RuntimeError("Failed to resolve first product link href")
-    await page.goto(urljoin(page.url, href), wait_until="domcontentloaded", timeout=60000)
+    """Navigate to the first product from search results."""
     try:
-        await page.wait_for_load_state("networkidle", timeout=30000)
+        await page.wait_for_selector(
+            f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}", timeout=20000, state="attached"
+        )
+
+        link = page.locator(f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}").first
+        href = await link.get_attribute("href")
+
+        if not href:
+            raise RuntimeError("Failed to resolve first product link href")
+
+        logger.info(f"Navigating to product: {href}")
+        await page.goto(
+            urljoin(page.url, href), wait_until="domcontentloaded", timeout=60000
+        )
+        try:
+            await page.wait_for_selector("xpath=//h1", timeout=20000)
+        except Exception:
+            pass
+
+        try:
+            await page.wait_for_selector(f"xpath={PRODUCT_CODE_XPATH}", timeout=20000)
+        except Exception:
+            pass
+
     except Exception as e:
-        print(f"Warning: {e}")
+        logger.error(f"Error navigating to product: {e}")
+        raise
 
 
 async def _attr_or_empty_async(page: Page, xpath: str, attr: str) -> str:
+    """Get attribute value from element or return empty string."""
     try:
         el = page.locator(f"xpath={xpath}").first
-        if await el.is_visible():
+        if await el.is_visible(timeout=5000):
             val = await el.get_attribute(attr, timeout=5000)
             return (val or "").strip()
         return ""
     except Exception as e:
-        print(f"[WARNING] Error getting attribute '{attr}': {e}")
+        logger.debug(f"Error getting attribute '{attr}': {e}")
         return ""
 
 
@@ -101,27 +151,30 @@ async def _extract_characteristics_async(page: Page) -> Dict[str, str]:
     data: Dict[str, str] = {}
     rows = page.locator(f"xpath={CHARACTERISTICS_ROWS_XPATH}")
     count = await rows.count()
-    
+
     for idx in range(count):
         row = rows.nth(idx)
         try:
             key_element = row.locator("xpath=./span[1]")
             value_element = row.locator("xpath=./span[2]")
-            
+
             key = await key_element.inner_text(timeout=5000)
             value = await value_element.inner_text(timeout=5000)
-            
+
             key = " ".join((key or "").split())
             value = " ".join((value or "").split())
-            
+
             if key and value:
                 data[key] = value
         except Exception as e:
+            logger.debug(f"Error extracting characteristic at index {idx}: {e}")
             continue
+
     return data
 
 
 async def _open_all_characteristics_async(page: Page) -> None:
+    """Ensure that all characteristics are expanded before extraction."""
     try:
         anchor = page.locator(f"xpath={CHARACTERISTICS_ANCHOR_XPATH}").first
         await anchor.scroll_into_view_if_needed(timeout=5000)
@@ -129,40 +182,48 @@ async def _open_all_characteristics_async(page: Page) -> None:
         try:
             wrapper = page.locator("xpath=//div[@id='br-characteristics']").first
             await wrapper.scroll_into_view_if_needed(timeout=5000)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Unable to scroll to characteristics section: {e}")
             return
 
     try:
-        button = page.locator(
-            f"xpath={ALL_CHARACTERISTICS_BUTTON_XPATH}"
-        ).first
+        button = page.locator(f"xpath={ALL_CHARACTERISTICS_BUTTON_XPATH}").first
         await button.scroll_into_view_if_needed(timeout=5000)
         try:
-            button.click(timeout=5000)
+            await button.click(timeout=5000)
         except Exception:
             await page.evaluate("el => el && el.click()", button)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Unable to trigger 'all characteristics' button: {e}")
         return
 
     try:
         await page.wait_for_selector("xpath=//div[@id='br-pr-7']", timeout=15000)
-    except Exception:
-        return
+    except Exception as e:
+        logger.debug(f"Characteristics expansion confirmation timed out: {e}")
 
 
 async def _extract_images_async(page: Page) -> List[str]:
+    """Collect all image URLs for the product."""
     urls: List[str] = []
     imgs = page.locator("xpath=//div[contains(@class,'main-pictures-block')]//img[@src]")
     count = await imgs.count()
+
     for idx in range(count):
         img = imgs.nth(idx)
-        src = (await img.get_attribute("src") or "").strip()
-        if src and not src.startswith("data:"):
-            urls.append(src)
+        try:
+            src = (await img.get_attribute("src") or "").strip()
+            if src and not src.startswith("data:"):
+                urls.append(src)
+        except Exception as e:
+            logger.debug(f"Error extracting image at index {idx}: {e}")
+            continue
+
     return urls
 
 
 async def _extract_prices_async(page: Page) -> Tuple[Optional[Decimal], Optional[Decimal]]:
+    """Extract current and old prices from the page."""
     current_text = await _text_or_empty_async(page, PRICE_XPATH)
     old_text = await _text_or_empty_async(page, OLD_PRICE_XPATH)
 
@@ -175,54 +236,109 @@ async def _extract_prices_async(page: Page) -> Tuple[Optional[Decimal], Optional
     return current_price, None
 
 
+async def _extract_name_async(page: Page) -> str:
+    """Extract product name from JSON-LD or fallback to DOM."""
+    try:
+        json_ld_script = await page.evaluate(
+            """() => {
+            const script = document.querySelector('script[type="application/ld+json"]');
+            return script ? script.textContent : null;
+        }"""
+        )
+
+        if json_ld_script:
+            try:
+                json_ld = json.loads(json_ld_script)
+                if isinstance(json_ld, dict) and "name" in json_ld:
+                    return str(json_ld["name"])
+                if isinstance(json_ld, list):
+                    for item in json_ld:
+                        if isinstance(item, dict) and "name" in item:
+                            return str(item["name"])
+            except json.JSONDecodeError as e:
+                logger.debug(f"JSON-LD parsing error: {e}")
+
+        name_element = await page.query_selector("h1")
+        if name_element:
+            name = await name_element.text_content()
+            return name.strip() if name else ""
+
+        return ""
+    except Exception as e:
+        logger.debug(f"Error extracting name: {e}")
+        return ""
+
+
+async def _extract_review_count_async(page: Page) -> int:
+    """Extract review count from the page."""
+    try:
+        review_text = await page.evaluate(
+            """() => {
+            const reviewLink = Array.from(document.querySelectorAll('a[href*="#reviews"]'))[0];
+            return reviewLink ? reviewLink.textContent.trim() : '';
+        }"""
+        )
+
+        if not review_text:
+            return 0
+
+        match = re.search(r"(\d+)", review_text)
+        return int(match.group(1)) if match else 0
+    except Exception as e:
+        logger.debug(f"Error extracting review count: {e}")
+        return 0
+
+
 async def parse_async(url: str) -> Product:
-    """Async version of parse function using async/await"""
+    """Parse product page asynchronously."""
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
             args=[
-                '--disable-gpu',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-setuid-sandbox',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
-                '--disable-site-isolation-trials'
-            ]
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-setuid-sandbox",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-site-isolation-trials",
+            ],
         )
-        
-        context = await browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            java_script_enabled=True,
-            bypass_csp=True,
-            ignore_https_errors=True,
-            offline=False,
-            has_touch=False,
-            is_mobile=False,
-            color_scheme='light',
-            reduced_motion='reduce',
-            accept_downloads=False,
-            service_workers='block',
-            permissions=[],
-            timezone_id='Europe/Kiev',
-            locale='en-US'
-        )
-        
-        # Block resources
-        await context.route('**/*.{png,jpg,jpeg,webp,svg,gif,ico}', lambda route: route.abort())
-        await context.route('**/*.css', lambda route: route.abort())
-        await context.route('**/*.woff*', lambda route: route.abort())
-        await context.route('**/*.ttf', lambda route: route.abort())
-        await context.route('**/*.mp4', lambda route: route.abort())
-        await context.route('**/*.webm', lambda route: route.abort())
-        await context.route('**/*.mp3', lambda route: route.abort())
 
+        context = None
         try:
-            # Create new page and set up request interception
+            context = await browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                java_script_enabled=True,
+                bypass_csp=True,
+                ignore_https_errors=True,
+                offline=False,
+                has_touch=False,
+                is_mobile=False,
+                color_scheme="light",
+                reduced_motion="reduce",
+                accept_downloads=False,
+                service_workers="block",
+                permissions=[],
+                timezone_id="Europe/Kiev",
+                locale="en-US",
+            )
+
+            await context.route("**/*.{png,jpg,jpeg,webp,svg,gif,ico}", lambda route: route.abort())
+            await context.route("**/*.css", lambda route: route.abort())
+            await context.route("**/*.woff*", lambda route: route.abort())
+            await context.route("**/*.ttf", lambda route: route.abort())
+            await context.route("**/*.mp4", lambda route: route.abort())
+            await context.route("**/*.webm", lambda route: route.abort())
+            await context.route("**/*.mp3", lambda route: route.abort())
+
             page = await context.new_page()
-            
-            # Set up request handler
+
             async def _route_handler(route):
                 try:
                     resource_type = route.request.resource_type
@@ -238,64 +354,111 @@ async def parse_async(url: str) -> Product:
 
             await context.route("**/*", _route_handler)
 
-            # Navigate to the page with a reliable waiting strategy
             try:
                 response = await page.goto(url, timeout=60000, wait_until="domcontentloaded")
                 if not response or not response.ok:
-                    return Product()  # Return empty product on failure
-            except Exception:
-                return Product()  # Return empty product on error
+                    logger.error(f"Failed to load URL {url}")
+                    return _empty_product(source_url=url, metadata={"parser": "Playwright"})
+            except Exception as e:
+                logger.error(f"Navigation error for {url}: {e}")
+                return _empty_product(source_url=url, metadata={"parser": "Playwright"})
 
-            # Wait for the product title with multiple possible selectors
+            is_product_url = "-p" in (page.url or "") and ".html" in (page.url or "")
+            if not is_product_url:
+                try:
+                    if (page.url or "").rstrip("/") == HOME_URL.rstrip("/"):
+                        input_xpath, submit_xpath = await _resolve_visible_pair_async(page)
+                        await page.fill(f"xpath={input_xpath}", QUERY)
+
+                        try:
+                            await page.evaluate(
+                                """() => {
+                                const el = document.querySelector('#page-preloader');
+                                if (el) el.style.pointerEvents = 'none';
+                            }"""
+                            )
+                        except Exception:
+                            pass
+
+                        try:
+                            await page.locator("#page-preloader").wait_for(
+                                state="hidden", timeout=5000
+                            )
+                        except Exception:
+                            pass
+
+                        try:
+                            await page.press(f"xpath={input_xpath}", "Enter")
+                        except Exception:
+                            try:
+                                await page.locator(f"xpath={submit_xpath}").scroll_into_view_if_needed(
+                                    timeout=5000
+                                )
+                                await page.click(f"xpath={submit_xpath}", timeout=5000, force=True)
+                            except Exception:
+                                await page.evaluate(
+                                    "(xp) => { const el = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; if (el) el.click(); }",
+                                    submit_xpath,
+                                )
+
+                        try:
+                            await page.wait_for_load_state("domcontentloaded", timeout=15000)
+                        except Exception:
+                            pass
+
+                        try:
+                            await page.wait_for_selector(
+                                f"xpath={SEARCH_FIRST_PRODUCT_LINK_XPATH}",
+                                timeout=20000,
+                                state="attached",
+                            )
+                        except Exception:
+                            pass
+
+                        await _goto_first_product_from_search_async(page)
+                    else:
+                        logger.warning(f"Non-product page URL provided: {page.url}")
+                except Exception as e:
+                    logger.error(f"Failed to navigate from non-product page to product: {e}")
+                    return _empty_product(source_url=page.url or url, metadata={"parser": "Playwright"})
+
             selectors = [
                 "h1[itemprop='name']",
                 ".product-title",
                 "h1.product-name",
-                "h1"
+                "h1",
             ]
-            
+
             for selector in selectors:
                 try:
                     await page.wait_for_selector(selector, timeout=5000)
                     break
                 except Exception:
                     continue
-            
-            # Add a small delay to ensure dynamic content is loaded
-            await page.wait_for_timeout(3000)
 
-            # Get page content
-            content = await page.content()
-            tree = html.fromstring(content)
-            
-            page_title = await page.title()
+            try:
+                await page.wait_for_selector(f"xpath={PRICE_XPATH}", timeout=15000)
+            except Exception:
+                pass
 
-            # Extract product details
+            await _open_all_characteristics_async(page)
+
             name = await _extract_name_async(page)
             price, sale_price = await _extract_prices_async(page)
             images = await _extract_images_async(page)
             characteristics = await _extract_characteristics_async(page)
             review_count = await _extract_review_count_async(page)
 
-            # Open all characteristics if needed
-            await _open_all_characteristics_async(page)
-
-            source_url = page.url
-
-            name = await _text_or_empty_async(page, "//h1[1]")
-            product_code = await _text_or_empty_async(
-                page, PRODUCT_CODE_XPATH
-            )
+            product_code = await _text_or_empty_async(page, PRODUCT_CODE_XPATH)
             manufacturer = await _attr_or_empty_async(page, "//*[@data-vendor][1]", "data-vendor")
 
-            # Extract color and storage from characteristics if available
             color = characteristics.get("Колір", "")
-            storage = characteristics.get("Вбудована пам'ять", "") or characteristics.get("Вбудована пам’ять", "")
-            
-            # Extract screen diagonal and resolution
+            storage = characteristics.get("Вбудована пам'ять", "") or characteristics.get(
+                "Вбудована пам’ять", ""
+            )
             screen_diagonal = characteristics.get("Діагональ екрана", "")
             display_resolution = characteristics.get("Роздільна здатність екрана", "")
-            
+
             return Product(
                 name=name,
                 color=color,
@@ -309,133 +472,90 @@ async def parse_async(url: str) -> Product:
                 screen_diagonal=screen_diagonal,
                 display_resolution=display_resolution,
                 characteristics=characteristics,
-                source_url=url,
+                source_url=page.url,
                 metadata={"parser": "Playwright"},
             )
-
+        except Exception as e:
+            logger.error(f"Error parsing {url}: {e}")
+            return _empty_product(source_url=url, metadata={"parser": "Playwright"})
         finally:
-            # Clean up resources
-            try:
-                await context.close()
-            except Exception:
-                pass
+            if context:
+                try:
+                    await context.close()
+                except Exception as err:
+                    logger.debug(f"Error closing context: {err}")
             try:
                 await browser.close()
-            except Exception:
-                pass
+            except Exception as err:
+                logger.debug(f"Error closing browser: {err}")
 
 
-async def _extract_name_async(page) -> str:
-    """Extract product name from the page.
-    
-    Args:
-        page: Playwright page object
-        
-    Returns:
-        str: Extracted product name or empty string if not found
-    """
+async def async_main() -> None:
+    """Async entry point for the parser."""
+    parser = argparse.ArgumentParser(description="Parse product page using Playwright")
+    parser.add_argument(
+        "url",
+        type=str,
+        nargs="?",
+        default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html",
+        help="URL of the product page to parse",
+    )
+    parser.add_argument(
+        "--csv", type=str, default="", help="Path to output CSV file (optional)"
+    )
+    parser.add_argument(
+        "--no-save-db",
+        action="store_false",
+        dest="save_db",
+        help="Disable saving to database",
+    )
+
+    args = parser.parse_args()
+
     try:
-        # First try to get name from JSON-LD data
-        json_ld_script = await page.evaluate('''() => {
-            const script = document.querySelector('script[type="application/ld+json"]');
-            return script ? script.textContent : null;
-        }''')
-        
-        if json_ld_script:
-            try:
-                json_ld = json.loads(json_ld_script)
-                if isinstance(json_ld, dict) and 'name' in json_ld:
-                    return str(json_ld['name'])
-                elif isinstance(json_ld, list):
-                    for item in json_ld:
-                        if isinstance(item, dict) and 'name' in item:
-                            return str(item['name'])
-            except json.JSONDecodeError:
-                pass
-        
-        # Fallback to XPath if JSON-LD not found or invalid
-        name_element = await page.query_selector('h1')
-        if name_element:
-            name = await name_element.text_content()
-            return name.strip() if name else ""
-            
-        return ""
+        logger.info(f"Starting parser for URL: {args.url}")
+        product = await parse_async(args.url)
+
+        print_mapping(product.to_dict())
+
+        csv_path = args.csv
+        if not csv_path:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_path = f"temp/assignment/outputs/playwright_{ts}.csv"
+
+        save_csv_row(product.to_dict(), csv_path)
+        logger.info(f"CSV saved: {csv_path}")
+
+        if args.save_db:
+            if (product.name or "").strip() and (product.product_code or "").strip():
+                await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: save_product_via_serializer(data=product.to_dict())
+                )
+                logger.info(
+                    "Product persisted to DB via serializer "
+                    f"(product_code={product.product_code})"
+                )
+            else:
+                logger.warning(
+                    "Skip DB save: required fields are blank "
+                    f"(name={product.name!r}, product_code={product.product_code!r})"
+                )
+
     except Exception as e:
-        print(f"Error extracting name: {e}")
-        return ""
-
-# Update helper functions to be async
-async def _extract_review_count_async(page) -> int:
-    """Extract review count from the page.
-    
-    Args:
-        page: Playwright page object
-        
-    Returns:
-        int: Number of reviews or 0 if not found
-    """
-    try:
-        # Look for review link and extract the number
-        review_text = await page.evaluate('''() => {
-            const reviewLink = Array.from(document.querySelectorAll('a[href*="#reviews"]'))[0];
-            return reviewLink ? reviewLink.textContent.trim() : '';
-        }''')
-        
-        if not review_text:
-            return 0
-            
-        # Extract first number from the text
-        import re
-        match = re.search(r'(\d+)', review_text)
-        return int(match.group(1)) if match else 0
-    except Exception:
-        return 0
-
-
-async def _open_all_characteristics_async(page):
-    """Async version of _open_all_characteristics"""
-    buttons = await page.query_selector_all("button.more-charact")
-    for btn in buttons:
-        try:
-            await btn.click()
-            await page.wait_for_timeout(300)  # Small delay between clicks
-        except Exception:
-            continue
-
-
-def parse(url: str = None) -> Product:
-    """Synchronous wrapper for the async parse_async function.
-    
-    Args:
-        url: URL of the product page to parse. If not provided, uses the default QUERY.
-    """
-    url_to_parse = url or QUERY
-    return async_to_sync(parse_async)(url_to_parse)
+        logger.error(f"Fatal error: {e}")
+        raise
 
 
 @time_execution("Parsing - Playwright")
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Parse product page using Playwright")
-    parser.add_argument("url", type=str, nargs='?', default="https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_15_128GB_Black-p1044347.html",
-                        help="URL of the product page (default: iPhone 15 example)")
-    parser.add_argument("--csv", type=str, default="", help="Path to output CSV file")
-    parser.add_argument("--no-save-db", action="store_false", dest="save_db", help="Disable saving to database")
-    args = parser.parse_args()
-
-    product = parse(args.url)
-    print_mapping(product.to_dict())
-
-    csv_path = args.csv
-    if not csv_path:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_path = f"temp/assignment/outputs/playwright_{ts}.csv"
-
-    save_csv_row(product.to_dict(), csv_path)
-    print(f"[INFO] CSV saved: {csv_path}")
-
-    if args.save_db:
-        save_product_via_serializer(data=product.to_dict())
-        print(f"[INFO] Product persisted to DB via serializer (product_code={product.product_code})")
+    """Synchronous entry point that runs the async main function."""
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        logger.info("Parser stopped by user")
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {e}")
+        raise
 
 
 if __name__ == "__main__":
