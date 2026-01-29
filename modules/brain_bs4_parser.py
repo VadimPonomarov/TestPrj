@@ -1,10 +1,11 @@
 import argparse
+import json
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
-from lxml import html
+from bs4 import BeautifulSoup
 
 from parser_app.common.constants import *
 from parser_app.common.csvio import *
@@ -15,9 +16,9 @@ from parser_app.common.schema import Product
 from parser_app.common.utils import coerce_decimal
 
 
-def _extract_jsonld_product(tree: html.HtmlElement) -> Optional[Dict[str, Any]]:
-    for node in tree.xpath("//script[@type='application/ld+json']/text()"):  # type: ignore[call-arg]
-        raw = (node or "").strip()
+def _extract_jsonld_product(soup: BeautifulSoup) -> Optional[Dict[str, Any]]:
+    for node in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = (node.get_text() or "").strip()
         if not raw:
             continue
         try:
@@ -93,36 +94,31 @@ def _normalise_offers(product_json: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _extract_review_count(tree: html.HtmlElement) -> int:
-    nodes = tree.xpath("//a[contains(@href,'#reviews')][1]")
-    if not nodes:
+def _extract_review_count(soup: BeautifulSoup) -> int:
+    node = soup.select_one("a[href*='#reviews']")
+    if not node:
         return 0
-    text = " ".join((nodes[0].text_content() or "").split())
+    text = " ".join((node.get_text(" ", strip=True) or "").split())
     m = re.search(r"(\d+)", text)
     return int(m.group(1)) if m else 0
 
 
-def _extract_product_code(tree: html.HtmlElement) -> str:
-    nodes = tree.xpath(
-        "//div[@id='product_code']//span[contains(@class,'br-pr-code-val')]/text()"
-    )
-    if nodes:
-        return str(nodes[0]).strip()
+def _extract_product_code(soup: BeautifulSoup) -> str:
+    node = soup.select_one("#product_code span.br-pr-code-val")
+    if node:
+        return node.get_text(strip=True)
     return ""
 
 
-def _extract_characteristics(tree: html.HtmlElement) -> Dict[str, str]:
+def _extract_characteristics(soup: BeautifulSoup) -> Dict[str, str]:
     result: Dict[str, str] = {}
-    rows = tree.xpath(
-        "//div[@id='br-pr-7']//div[contains(@class,'br-pr-chr')]//div[count(span)>=2]"
-    )
+    rows = soup.select("#br-pr-7 .br-pr-chr div")
     for row in rows:
-        key_nodes = row.xpath("./span[1]")
-        val_nodes = row.xpath("./span[2]")
-        if not key_nodes or not val_nodes:
+        spans = row.find_all("span")
+        if len(spans) < 2:
             continue
-        key = " ".join((key_nodes[0].text_content() or "").split())
-        value = " ".join((val_nodes[0].text_content() or "").split())
+        key = " ".join((spans[0].get_text(" ", strip=True) or "").split())
+        value = " ".join((spans[1].get_text(" ", strip=True) or "").split())
         if key and value:
             result[key] = value
     return result
@@ -146,29 +142,40 @@ def parse_product(url: str) -> Product:
     response = requests.get(url, headers=REQUEST_HEADERS, timeout=30)
     response.raise_for_status()
 
-    tree = html.fromstring(response.text)
+    soup = BeautifulSoup(response.text, "lxml")
 
-    product_json = _extract_jsonld_product(tree)
+    product_json = _extract_jsonld_product(soup)
     offers = _normalise_offers(product_json)
     images = _extract_images(product_json)
 
-    name_nodes = tree.xpath("//h1[1]")
-    name = " ".join((name_nodes[0].text_content() or "").split()) if name_nodes else ""
+    name_node = soup.find("h1")
+    name = " ".join((name_node.get_text(" ", strip=True) or "").split()) if name_node else ""
 
-    characteristics = _extract_characteristics(tree)
+    characteristics = _extract_characteristics(soup)
     screen_diagonal, display_resolution = _extract_display_info(characteristics)
 
-    color_nodes = tree.xpath(
-        "//span[normalize-space()='Колір']/following-sibling::span[1]//a[1]/text()"
-    )
-    color = str(color_nodes[0]).strip() if color_nodes else ""
+    color = ""
+    for label in soup.find_all("span"):
+        if (label.get_text(strip=True) or "").strip() == "Колір":
+            sib = label.find_next_sibling("span")
+            if sib:
+                a = sib.find("a")
+                if a:
+                    color = (a.get_text(strip=True) or "").strip()
+            break
 
-    storage_nodes = tree.xpath(
-        '//span[normalize-space()="Вбудована пам\'ять" or normalize-space()="Вбудована пам\u2019ять"]/following-sibling::span[1]//a[1]/text()'
-    )
-    storage = str(storage_nodes[0]).strip() if storage_nodes else ""
+    storage = ""
+    storage_labels = {"Вбудована пам'ять", "Вбудована пам’ять"}
+    for label in soup.find_all("span"):
+        if (label.get_text(strip=True) or "").strip() in storage_labels:
+            sib = label.find_next_sibling("span")
+            if sib:
+                a = sib.find("a")
+                if a:
+                    storage = (a.get_text(strip=True) or "").strip()
+            break
 
-    product_code = _extract_product_code(tree)
+    product_code = _extract_product_code(soup)
 
     price = coerce_decimal(offers.get("price"))
     sale_price = coerce_decimal(offers.get("sale_price"))
@@ -182,7 +189,7 @@ def parse_product(url: str) -> Product:
         sale_price=sale_price,
         images=images,
         product_code=product_code,
-        review_count=_extract_review_count(tree),
+        review_count=_extract_review_count(soup),
         screen_diagonal=screen_diagonal,
         display_resolution=display_resolution,
         characteristics=characteristics,
